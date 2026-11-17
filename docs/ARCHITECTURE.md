@@ -15,10 +15,10 @@ frontend/src/api.js  (stable HTTP adapter)
 
 ## Ownership
 
-- **A / Aaron — Backend & integration:** Own `backend/app/main.py`, persistence, API tests, schema evolution, deployment and shared integration.
-- **B / Wyatt — AI & testing:** Create `backend/app/ai/` containing an interchangeable retrieval/model interface. A connects this to the API after reviewing the contract. Add prompt tests and documentation.
-- **C / Joey — Newcomer UX:** Move NewcomerView from `frontend/src/App.jsx` into `frontend/src/features/newcomer/`; develop question submission, answers, citations, statuses and error UX using `api.js`.
-- **D / Vincent — Mentor UX:** Move MentorView from `frontend/src/App.jsx` into `frontend/src/features/mentor/`; develop review/edit/approve and knowledge reuse using `api.js`.
+- **A / Open — Backend & integration:** Own `backend/app/main.py`, persistence, API tests, schema evolution, deployment and shared integration.
+- **B / Open — AI & testing:** Create `backend/app/ai/` containing an interchangeable retrieval/model interface. A connects this to the API after reviewing the contract. Add prompt tests and documentation.
+- **C / Wyatt — Newcomer UX:** Move NewcomerView from `frontend/src/App.jsx` into `frontend/src/features/newcomer/`; develop question submission, answers, citations, statuses and error UX using `api.js`.
+- **D / Open — Mentor UX:** Move MentorView from `frontend/src/App.jsx` into `frontend/src/features/mentor/`; develop review/edit/approve and knowledge reuse using `api.js`.
 
 Two PRs per person are suggested as substantial, separately reviewable slices. The scaffold commit is infrastructure, **not** a substitute for anyone's individual implementation PR.
 
