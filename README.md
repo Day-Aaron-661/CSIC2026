@@ -28,10 +28,10 @@ Tests: `cd backend && pytest -q` and `cd frontend && npm run build`.
 
 | Owner | Area | First implementation PR | Second implementation PR |
 |---|---|---|---|
-| Aaron (A) | `backend/app/` | Data/API robustness, schema | Review state transitions, persistence tests |
-| Wyatt (B) | `backend/app/ai/` (new) | Document retrieval + model adapter | Failure handling, citations, prompt regression tests |
-| Joey (C) | `frontend/src/features/newcomer/` (new) | Newcomer question and answer UI | Refresh/status flow, error and accessibility UX |
-| Vincent (D) | `frontend/src/features/mentor/` (new) | Mentor queue/review UI | Verified knowledge lookup/reuse |
+| Available (A) | `backend/app/` | Data/API robustness, schema | Review state transitions, persistence tests |
+| Available (B) | `backend/app/ai/` (new) | Document retrieval + model adapter | Failure handling, citations, prompt regression tests |
+| Wyatt (C) | `frontend/src/features/newcomer/` (new) | Newcomer question and answer UI | Refresh/status flow, error and accessibility UX |
+| Available (D) | `frontend/src/features/mentor/` (new) | Mentor queue/review UI | Verified knowledge lookup/reuse |
 
 **Important:** The starter UI is in `frontend/src/App.jsx`. Owners C and D should move their respective view into their own feature folders, rather than both editing App.jsx simultaneously. B's AI implementation should be called through a function behind `POST /api/questions` without changing the response contract. A is responsible for shared API/storage changes.
 
