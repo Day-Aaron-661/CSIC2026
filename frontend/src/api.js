@@ -8,7 +8,9 @@ async function request(path, options = {}) {
       ...options,
       headers: { 'Content-Type': 'application/json', ...options.headers }
     });
-  } catch {
+  } catch (error) {
+    // Feature cleanup/timeout is different from a failed connection.
+    if (error.name === 'AbortError') throw error;
     throw new Error('Cannot connect to backend. Start FastAPI on port 8000.');
   }
   if (!response.ok) {
@@ -21,8 +23,8 @@ async function request(path, options = {}) {
 
 export const api = {
   health: () => request('/api/health'),
-  ask: (question) => request('/api/questions', { method: 'POST', body: JSON.stringify({ question }) }),
-  questions: (status) => request('/api/questions' + (status ? `?status=${encodeURIComponent(status)}` : '')),
+  ask: (question, { signal } = {}) => request('/api/questions', { method: 'POST', body: JSON.stringify({ question }), signal }),
+  questions: (status, { signal } = {}) => request('/api/questions' + (status ? `?status=${encodeURIComponent(status)}` : ''), { signal }),
   question: (id) => request(`/api/questions/${id}`),
   review: (id, answer, reviewer) => request(`/api/questions/${id}/review`, {
     method: 'POST', body: JSON.stringify({ answer, reviewer })
