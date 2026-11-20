@@ -17,7 +17,7 @@ frontend/src/api.js  (stable HTTP adapter)
 
 - **A / Open — Backend & integration:** Own `backend/app/main.py`, persistence, API tests, schema evolution, deployment and shared integration.
 - **B / Open — AI & testing:** Create `backend/app/ai/` containing an interchangeable retrieval/model interface. A connects this to the API after reviewing the contract. Add prompt tests and documentation.
-- **C / Wyatt — Newcomer UX:** Move NewcomerView from `frontend/src/App.jsx` into `frontend/src/features/newcomer/`; develop question submission, answers, citations, statuses and error UX using `api.js`.
+- **C / Wyatt — Newcomer UX:** `frontend/src/features/newcomer/` now contains NewcomerView, QuestionCard, scoped styles and the question-state hook. Submission, review status, automatic refresh, filters and error UX use `api.js`. Citations await A/B's response contract; see `docs/NEWCOMER_HANDOFF.md`.
 - **D / Open — Mentor UX:** Move MentorView from `frontend/src/App.jsx` into `frontend/src/features/mentor/`; develop review/edit/approve and knowledge reuse using `api.js`.
 
 Two PRs per person are suggested as substantial, separately reviewable slices. The scaffold commit is infrastructure, **not** a substitute for anyone's individual implementation PR.

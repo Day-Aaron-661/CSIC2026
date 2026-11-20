@@ -34,4 +34,6 @@ This is a **stable starter contract**, not a final schema. Owner B may propose a
 
 ## Integration boundary
 
-Frontend imports `frontend/src/api.js` only, not raw `fetch` scattered in feature components. Backend is authoritative for approval state. AI output alone must never update the approval status. UI refresh is manual in this skeleton, so two-browser demo requires clicking Refresh.
+Frontend imports `frontend/src/api.js` only, not raw `fetch` scattered in feature components. Backend is authoritative for approval state. AI output alone must never update the approval status. Newcomer checks the shared list every five seconds while visible and refreshes when returning to the tab; Mentor's starter queue still needs manual refresh.
+
+The JS adapter accepts optional `{ signal }` as the second argument to `questions(status, options)` and `ask(question, options)`. This supports cancelling obsolete requests and timeouts; HTTP paths, bodies, question fields and existing callers are unchanged. Newcomer inserts the successful POST response immediately instead of treating a later list-read failure as a failed submission. There is no automatic POST retry or server-side idempotency guarantee.
