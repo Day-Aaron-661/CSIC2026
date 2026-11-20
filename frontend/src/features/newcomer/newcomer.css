@@ -1,0 +1,55 @@
+.newcomer { --newcomer-muted: #526377; }
+.newcomer h2 { margin: 0 0 8px; font-size: 1.4rem; }
+.newcomer-heading { margin-bottom: 22px; }
+.newcomer-heading > p:last-child { margin: 0; color: var(--newcomer-muted); }
+.newcomer-eyebrow { margin: 0 0 6px; color: #2056a3; font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.newcomer-compose { padding: 22px; border: 1px solid #dce4ef; border-radius: 12px; background: white; box-shadow: 0 3px 12px #1b2a3d06; }
+.newcomer-compose label { margin: 0; }
+.newcomer-help { color: var(--newcomer-muted); font-size: .875rem; margin: 6px 0 12px; }
+.newcomer-compose textarea { min-height: 120px; }
+.newcomer-compose-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; margin-top: 10px; }
+.newcomer-compose-footer .newcomer-help { margin: 0; }
+.newcomer-compose-footer button { margin: 0; }
+.newcomer-error, .newcomer-success { width: 100%; margin: 14px 0 0; padding: 12px 14px; border-radius: 8px; font-size: .9rem; }
+.newcomer-error { color: #9b1c2d; background: #fff2f3; border: 1px solid #efc3ca; }
+.newcomer-success { color: #14543b; background: #edf9f1; border: 1px solid #b5dcc5; }
+.newcomer a { color: #174981; text-underline-offset: 3px; }
+.newcomer-history { margin-top: 32px; }
+.newcomer-history-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.newcomer-history-heading > div { min-width: 0; }
+.newcomer-history-heading button { flex-shrink: 0; margin: 0; }
+.newcomer-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 18px; }
+.newcomer-filters button { margin: 0; font-size: .875rem; }
+.newcomer-review-summary { color: var(--newcomer-muted); font-size: .8rem; margin: -6px 0 16px; }
+.newcomer-review-summary:empty { display: none; }
+.newcomer-list { display: grid; gap: 16px; }
+.newcomer-question { min-width: 0; padding: 22px; border-radius: 12px; white-space: normal; overflow-wrap: anywhere; }
+.newcomer-question-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; justify-content: space-between; color: var(--newcomer-muted); font-size: .8rem; }
+.newcomer-badge { border-radius: 20px; padding: 4px 10px; font-weight: 600; }
+.newcomer-badge-pending { color: #70500a; background: #fff2cc; }
+.newcomer-badge-approved { color: #14543b; background: #e2f5e9; }
+.newcomer-question h3 { margin: 16px 0 4px; font-size: 1.1rem; white-space: pre-wrap; }
+.newcomer-timestamp { color: var(--newcomer-muted); font-size: .8rem; margin: 0 0 18px; }
+.newcomer-answer { padding: 14px 16px; border-left: 3px solid #b8c8dc; background: #f5f8fc; border-radius: 0 8px 8px 0; }
+.newcomer-answer-approved { border-left-color: #3f8c67; background: #f1f8f4; }
+.newcomer-answer h4 { margin: 0 0 10px; font-size: .9rem; }
+.newcomer-answer-text { margin: 0; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.newcomer-answer-note, .newcomer-reviewer { margin: 12px 0 0; color: var(--newcomer-muted); font-size: .8rem; }
+.newcomer-original { margin-top: 16px; }
+.newcomer-original summary { cursor: pointer; color: #174981; font-size: .875rem; width: fit-content; }
+.newcomer-original p { margin-top: 10px; padding: 12px; background: #f5f8fc; border-radius: 8px; }
+.newcomer-sources { margin: 14px 0 0; color: var(--newcomer-muted); font-size: .8rem; }
+.newcomer-empty { padding: 28px 22px; text-align: center; color: var(--newcomer-muted); border: 1px dashed #b9c5d4; border-radius: 12px; background: #ffffff80; }
+.newcomer-empty h3 { color: #1b2a3d; font-size: 1rem; margin: 0 0 6px; }
+.newcomer-empty p { margin: 0; }
+.newcomer :is(button, textarea, a, summary):focus-visible { outline: 3px solid #3275c4; outline-offset: 3px; }
+.newcomer button { min-height: 44px; }
+@media (max-width: 560px) {
+  .newcomer-compose, .newcomer-question { padding: 16px; }
+  .newcomer-history-heading { flex-direction: column; gap: 4px; }
+  .newcomer-history-heading button { margin-bottom: 12px; }
+  .newcomer-compose-footer { flex-direction: column; align-items: stretch; }
+  .newcomer-compose-footer .newcomer-help { text-align: right; }
+  .newcomer-filters { gap: 6px; }
+  .newcomer-filters button { padding: 10px 12px; }
+}

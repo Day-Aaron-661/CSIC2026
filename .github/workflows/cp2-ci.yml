@@ -20,4 +20,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - run: cd frontend && npm install && npm run build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r backend/requirements.txt
+      - run: cd frontend && npm ci
+      - run: cd frontend && npx playwright install --with-deps chromium
+      - run: cd frontend && npm test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: newcomer-browser-results
+          path: frontend/test-results/
+          retention-days: 7
+      - run: cd frontend && npm run build
