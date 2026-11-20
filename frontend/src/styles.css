@@ -1,0 +1,20 @@
+:root { font: 16px/1.5 system-ui, sans-serif; color: #1b2a3d; background: #f4f7fb; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { width: min(820px, 94vw); margin: 24px auto 80px; }
+h1 { margin-bottom: 0; }
+header p, .meta, small { color: #526377; }
+section { margin-top: 22px; }
+nav { display: flex; gap: 12px; margin: 20px 0; }
+button { border: 0; border-radius: 7px; background: #2056a3; color: white; padding: 10px 16px; cursor: pointer; margin: 8px 8px 8px 0; }
+button.secondary { background: #e1e8f2; color: #1b2a3d; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+form { display: flex; flex-direction: column; align-items: flex-start; }
+label { display: block; font-weight: 600; margin-top: 12px; }
+textarea, input { width: 100%; border: 1px solid #b9c5d4; border-radius: 7px; padding: 12px; font: inherit; background: white; }
+textarea { min-height: 92px; resize: vertical; }
+.stack { display: grid; gap: 14px; margin-top: 18px; }
+article { padding: 18px; background: white; border: 1px solid #dce4ef; border-radius: 9px; white-space: pre-wrap; }
+article h3 { margin: 8px 0; overflow-wrap: anywhere; }
+.notice { background: #fff8df; border: 1px solid #ead58a; padding: 12px; border-radius: 7px; }
+.error { color: #b11d2d; }
