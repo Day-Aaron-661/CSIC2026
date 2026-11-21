@@ -4,6 +4,9 @@ import { api } from '../../api.js';
 // Same timings as the newcomer view, so both sides of a two-browser demo stay in step.
 const REFRESH_INTERVAL = 5000;
 const REFRESH_TIMEOUT = 15000;
+// An approval may have been saved even if its reply never arrives, so a timeout
+// re-reads the queue instead of resending (see docs/API_CONTRACT.md).
+const APPROVE_TIMEOUT = 15000;
 const MAX_NOTICES = 5;
 const MAX_ANSWER = 10000;
 const MAX_REVIEWER = 100;
@@ -13,7 +16,8 @@ function without(record, key) {
   return rest;
 }
 
-export default function useMentorQueue() {
+// onApproved(id) runs after the server confirms an approval (used to re-read approved answers).
+export default function useMentorQueue({ onApproved } = {}) {
   const [items, setItems] = useState([]);
   const [drafts, setDrafts] = useState({});
   const [loaded, setLoaded] = useState(false);
@@ -27,8 +31,9 @@ export default function useMentorQueue() {
   // A refresh was asked for while a read was already running; read again when it ends,
   // so a re-read after a failed approval is never silently dropped.
   const refreshAgain = useRef(false);
-  // Question ids with a review POST in flight; a ref blocks double clicks before React re-renders.
-  const approvals = useRef(new Set());
+  // Question id -> AbortController of its review POST in flight. A ref blocks double clicks
+  // before React re-renders, and lets unmount cancel the request.
+  const approvals = useRef(new Map());
   // Ids whose last approval attempt failed; if they leave the queue we explain why.
   const failedApprovals = useRef(new Set());
   // Ids this mentor approved successfully. Approval is final (a second review is 409),
@@ -37,6 +42,9 @@ export default function useMentorQueue() {
   // Mirrors of state, so a refresh can compare the old queue with the new one.
   const itemsRef = useRef([]);
   const draftsRef = useRef({});
+  // Latest callback in a ref, so a new function each render does not restart polling.
+  const onApprovedRef = useRef(onApproved);
+  onApprovedRef.current = onApproved;
 
   const updateDrafts = useCallback((update) => {
     setDrafts(previous => {
@@ -140,13 +148,18 @@ export default function useMentorQueue() {
     const name = reviewer.trim();
     if (!mounted.current || approvals.current.has(id) || !text || !name
       || text.length > MAX_ANSWER || name.length > MAX_REVIEWER) return false;
-    approvals.current.add(id);
+    const controller = new AbortController();
+    approvals.current.set(id, controller);
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, APPROVE_TIMEOUT);
     setApproving(previous => ({ ...previous, [id]: true }));
     setApproveErrors(previous => without(previous, id));
     let failed = false;
     try {
-      // api.review has no cancellation signal yet (planned for PR2); a reply after unmount is ignored.
-      await api.review(id, text, name);
+      await api.review(id, text, name, { signal: controller.signal });
       if (!mounted.current) return false;
       failedApprovals.current.delete(id);
       approvedIds.current.add(id);
@@ -154,14 +167,19 @@ export default function useMentorQueue() {
       setItems(itemsRef.current);
       updateDrafts(previous => without(previous, id));
       addNotice({ key: `approved-${id}`, kind: 'approved', id });
+      onApprovedRef.current?.(id);
       return true;
     } catch (error) {
       if (!mounted.current) return false;
       failed = true;
       failedApprovals.current.add(id);
-      setApproveErrors(previous => ({ ...previous, [id]: error.message || 'Unknown error' }));
+      const message = timedOut
+        ? `no reply after ${APPROVE_TIMEOUT / 1000} seconds; it may still have been saved`
+        : error.message || 'Unknown error';
+      setApproveErrors(previous => ({ ...previous, [id]: message }));
       return false;
     } finally {
+      clearTimeout(timeout);
       approvals.current.delete(id);
       if (mounted.current) {
         setApproving(previous => without(previous, id));
@@ -194,6 +212,9 @@ export default function useMentorQueue() {
       document.removeEventListener('visibilitychange', onVisibility);
       readRequest.current?.abort();
       readRequest.current = null;
+      // Unmount: cancel approvals in flight. No error is shown; the next visit re-reads the queue.
+      for (const controller of approvals.current.values()) controller.abort();
+      approvals.current.clear();
     };
   }, [refresh]);
 

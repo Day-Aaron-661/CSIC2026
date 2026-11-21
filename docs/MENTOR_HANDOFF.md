@@ -2,11 +2,11 @@
 
 Owner: Aaron. Implementation date: 2026-11-20 (Asia/Taipei).
 
-This change builds on C's newcomer PR [#9](https://github.com/Day-Aaron-661/CSIC2026/pull/9), which provides the `{ signal }` option in `api.js`, the `App.jsx` React import fix and the Playwright setup. #9 has been merged into `chore/cp2-team-scaffold`, so this D PR also targets `chore/cp2-team-scaffold` and its diff shows only D's work. The scaffold branch, including C's and D's work, is expected to be merged into `main` together. This document records implementation rationale for review, not team consensus or a completed steward review.
+This change builds on C's newcomer PR [#9](https://github.com/Day-Aaron-661/CSIC2026/pull/9), which provides the `{ signal }` option in `api.js`, the `App.jsx` React import fix and the Playwright setup; #9 reached `main` through the scaffold merge (#10). PR1 is [#11](https://github.com/Day-Aaron-661/CSIC2026/pull/11). PR2 (knowledge lookup/reuse and approval timeout, below) builds on PR1. This document records implementation rationale for review, not team consensus or a completed steward review.
 
 ## Scope
 
-PR1 turns the scaffold Mentor shell into a review queue that is safe to use in a two-browser demo: review, edit and approve pending questions. Knowledge lookup/reuse and request cancellation for `api.review()` are deferred to a later D PR.
+PR1 turns the scaffold Mentor shell into a review queue that is safe to use in a two-browser demo: review, edit and approve pending questions. PR2 adds lookup and reuse of mentor-approved answers and a timeout for approvals; see [PR2](#pr2--approved-answer-lookup-reuse-and-approval-timeout).
 
 ## Files and ownership
 
@@ -18,7 +18,7 @@ PR1 turns the scaffold Mentor shell into a review queue that is safe to use in a
 - `frontend/src/App.jsx`: the inline scaffold `MentorView` is removed and replaced by an import of D's view. The now-unused `useEffect` and `api` imports are removed. Navigation and the Newcomer view are unchanged.
 - `docs/API_CONTRACT.md`: one sentence updated to say the Mentor queue now polls like Newcomer. Endpoints, request bodies and response fields are unchanged.
 
-Backend handlers, database schema, `api.js` and C's newcomer files are unchanged by D.
+In PR1, backend handlers, database schema, `api.js` and C's newcomer files are unchanged by D (PR2 adds optional signals to `api.js`; see below).
 
 ## Interaction decisions
 
@@ -50,7 +50,37 @@ These are D's implementation choices proposed for human review. Record the team'
 - **A:** identity/authentication for reviewers, data isolation, and any schema change for answer revisions after approval (currently a second review returns 409).
 - **B:** real AI drafts and an agreed way to represent AI errors; then the team can decide whether to enable the placeholder check from decision 2 or extend it to AI error output.
 - **C:** no change needed; the Newcomer view already shows `reviewed_answer`, the reviewer name and the original draft.
-- **D (next PR):** knowledge lookup/reuse of approved answers, and cancellation/timeout for `api.review()` once the `{ signal }` change to `api.js` is agreed in `docs/API_CONTRACT.md`.
+- **D:** knowledge lookup/reuse and the approval timeout are in PR2. If B adds retrieval, `findSimilar` in `matchKnowledge.js` is the single place to swap keyword matching for it.
 - **All four:** real outside-team user sessions and substantive reviews. Automated browser tests are developer checks and do not count as user sessions.
 
 Unsent mentor answers are component state: they survive refreshes, but not a page reload or switching away from the Mentor view.
+
+## PR2 — approved-answer lookup, reuse and approval timeout
+
+Implementation date: 2026-11-21 (Asia/Taipei). Goal: mentors should not have to answer the same basic question again (DECISION.md, Problem). No backend change: `GET /api/knowledge` already returns approved questions.
+
+### What the mentor sees
+
+1. **Similar approved answers on each card.** Under the AI draft, a card lists up to three previously approved questions that share keywords with the pending one, with reviewer, approval time and the approved answer (collapsed). The section is labeled "keyword match, not AI" and is hidden when nothing matches.
+2. **Use as starting point.** Copies that approved answer into the answer box and focuses it. If the mentor has already edited the box, a confirmation asks before replacing it. Reuse only fills the box; the question is approved only when the mentor presses Approve answer.
+3. **Search approved answers.** A search box above the queue searches every approved question and answer by keyword (read-only, up to ten results).
+4. **Fresh after each approval.** The approved-answer list is read on opening the Mentor view, on Refresh answers, and right after each successful approval, so an answer just approved is offered for the next similar question. It is not polled; approvals by another mentor show up after Refresh answers or the next own approval.
+5. **Approval timeout.** If an approval gets no reply within 15 seconds, the card shows "no reply after 15 seconds; it may still have been saved", keeps the typed answer and re-reads the queue. It never resends automatically. If the server did save it, the question leaves the queue with the neutral "no longer pending" notice from decision 5; otherwise the card stays and the mentor can try again (if the first request was in fact saved, the server answers 409 and the same notice follows). While an approval is waiting, the rest of the queue keeps refreshing (decision 6); the timeout additionally releases the stuck card.
+
+### How matching works (and its limits)
+
+`matchKnowledge.js` lower-cases and NFKC-normalizes text, splits English into words and Chinese into overlapping two-character pairs, and drops common filler words. Card suggestions use the Dice coefficient between the two questions (threshold 0.25); search uses the share of typed keywords found in the question or answer (threshold 0.5). This is string overlap, not semantic retrieval: a question worded differently can be missed, and a shared technical word can produce a weak suggestion. Mentors must check every suggestion before reusing it. Only entries with `status: "approved"` and a `reviewed_answer` are offered.
+
+### Files
+
+- New in `frontend/src/features/mentor/`: `matchKnowledge.js` (matching), `useKnowledge.js` (reads with 15 s timeout, one read at a time, cancelled on unmount; failures only affect the lookup panel), `KnowledgeMatches.jsx` (card section), `KnowledgeSearch.jsx` (search box), `Timestamp.jsx` (shared by the card and the lookup views).
+- Changed: `MentorView.jsx`, `ReviewCard.jsx`, `useMentorQueue.js` (`onApproved` callback, approval timeout, abort on unmount), `mentor.css`, `frontend/tests/mentor.spec.js` (8 new browser tests: suggestions and reuse, confirm before replacing, Chinese matching, re-read after approval, lookup failure, search, literal markup on mobile, approval timeout).
+- **Shared files:** `frontend/src/api.js` — `review(id, answer, reviewer, { signal })` and `knowledge({ signal })` accept an optional signal, following C's change for `questions`/`ask`; existing callers are unaffected. `docs/API_CONTRACT.md` — the adapter paragraph lists the new options and the no-automatic-resend rule. HTTP paths, bodies and fields are unchanged.
+
+### Reviewer walkthrough (PR2)
+
+1. Start both servers. As Newcomer, ask "How do I start the backend?"; as Mentor, approve it with an edited answer.
+2. As Newcomer, ask "How can I start the backend locally?". On its Mentor card, "Previously approved answers" lists the first question. Expand it, press Use as starting point, edit and approve.
+3. Type a keyword in Search approved answers; try one that matches nothing.
+4. Edit an answer, then press Use as starting point and cancel the confirmation: your text stays.
+5. Stop the backend and press Refresh answers: an error appears in the lookup panel while the last loaded queue stays usable.

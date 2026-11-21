@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useRef } from 'react';
+import KnowledgeMatches from './KnowledgeMatches.jsx';
+import Timestamp from './Timestamp.jsx';
 
 const MAX_ANSWER = 10000;
 
@@ -10,13 +12,8 @@ const MAX_ANSWER = 10000;
 //   return text.includes(DEMO_PLACEHOLDER_MARKER);
 // }
 
-function Timestamp({ value, prefix }) {
-  const date = new Date(value);
-  if (!value || Number.isNaN(date.getTime())) return null;
-  return <span>{prefix} <time dateTime={value}>{date.toLocaleString()}</time></span>;
-}
-
-export default function ReviewCard({ item, draft, reviewerReady, approving, error, onDraftChange, onReset, onApprove }) {
+export default function ReviewCard({ item, draft, matches, reviewerReady, approving, error, onDraftChange, onReset, onApprove }) {
+  const answerRef = useRef(null);
   const aiAnswer = item.ai_answer ?? '';
   const answerId = `mentor-answer-${item.id}`;
   const countId = `mentor-answer-count-${item.id}`;
@@ -24,6 +21,14 @@ export default function ReviewCard({ item, draft, reviewerReady, approving, erro
   const unchanged = draft === aiAnswer;
   const canApprove = reviewerReady && !approving && trimmed.length > 0 && trimmed.length <= MAX_ANSWER;
   // const canApprove = reviewerReady && !approving && trimmed.length > 0 && trimmed.length <= MAX_ANSWER && !isDemoPlaceholder(draft);
+
+  // Reusing only fills the answer box; the mentor still has to approve it.
+  const reuseApprovedAnswer = (text) => {
+    if (!unchanged && draft !== text
+      && !window.confirm('Replace your edited answer with this approved answer?')) return;
+    onDraftChange(text.slice(0, MAX_ANSWER));
+    answerRef.current?.focus();
+  };
 
   return <article className="mentor-card" aria-labelledby={`mentor-question-${item.id}`} id={`mentor-card-${item.id}`}>
     <div className="mentor-card-meta">
@@ -38,11 +43,14 @@ export default function ReviewCard({ item, draft, reviewerReady, approving, erro
       <p className="mentor-text">{aiAnswer}</p>
     </div>
 
+    <KnowledgeMatches cardId={item.id} matches={matches} disabled={approving} onUse={reuseApprovedAnswer} />
+
     <label htmlFor={answerId}>Mentor verified answer</label>
     <p className="mentor-help" id={`${answerId}-help`}>
       Pre-filled with the AI draft. Check it against project material and edit before approving.
     </p>
     <textarea
+      ref={answerRef}
       id={answerId}
       value={draft}
       onChange={event => onDraftChange(event.target.value)}

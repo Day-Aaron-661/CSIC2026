@@ -1,7 +1,12 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import KnowledgeSearch from './KnowledgeSearch.jsx';
 import ReviewCard from './ReviewCard.jsx';
+import { findSimilar } from './matchKnowledge.js';
+import useKnowledge from './useKnowledge.js';
 import useMentorQueue from './useMentorQueue.js';
 import './mentor.css';
+
+const NO_MATCHES = [];
 
 function noticeText(notice) {
   if (notice.kind === 'approved') return `Question #${notice.id} approved. Newcomers now see your reviewed answer.`;
@@ -14,11 +19,16 @@ function noticeText(notice) {
 
 export default function MentorView() {
   const [reviewer, setReviewer] = useState('Mentor');
+  const knowledge = useKnowledge();
+  const refreshKnowledge = knowledge.refresh;
   const {
     items, drafts, loaded, refreshing, loadError, approving, approveErrors, notices,
     refresh, setDraft, resetDraft, approve, dismissNotice,
-  } = useMentorQueue();
+  } = useMentorQueue({ onApproved: () => refreshKnowledge({ force: true }) });
   const reviewerReady = reviewer.trim().length > 0;
+  const matches = useMemo(() => Object.fromEntries(
+    items.map(item => [item.id, findSimilar(item.question, knowledge.items)])
+  ), [items, knowledge.items]);
 
   return <section className="mentor" aria-labelledby="mentor-title">
     <div className="mentor-heading">
@@ -39,6 +49,8 @@ export default function MentorView() {
       />
       {!reviewerReady && <p className="mentor-error" role="alert">Enter a reviewer name to approve answers.</p>}
     </div>
+
+    <KnowledgeSearch knowledge={knowledge} />
 
     <section className="mentor-queue" aria-labelledby="mentor-queue-title">
       <div className="mentor-queue-heading">
@@ -74,6 +86,7 @@ export default function MentorView() {
           key={item.id}
           item={item}
           draft={drafts[item.id] ?? item.ai_answer ?? ''}
+          matches={matches[item.id] ?? NO_MATCHES}
           reviewerReady={reviewerReady}
           approving={Boolean(approving[item.id])}
           error={approveErrors[item.id]}
