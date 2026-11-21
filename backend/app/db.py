@@ -62,8 +62,32 @@ def _migrate_to_v1(db):
     db.execute("CREATE INDEX idx_citations_question ON citations(question_id)")
 
 
+def _migrate_to_v2(db):
+    """Add an append-only review history.
+
+    ``version`` numbers reviews per question (1, 2, ...) so a future
+    "revise approved answer" action needs no schema change. Questions that
+    were approved before this table existed get their version-1 entry
+    backfilled from the questions row, so every approval has a history.
+    """
+    db.execute("""CREATE TABLE reviews (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+        version INTEGER NOT NULL CHECK (version >= 1),
+        action TEXT NOT NULL CHECK (action IN ('approve')),
+        answer TEXT NOT NULL,
+        reviewer TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE (question_id, version)
+    )""")
+    db.execute("""INSERT INTO reviews (question_id, version, action, answer, reviewer, created_at)
+        SELECT id, 1, 'approve', COALESCE(reviewed_answer, ''), COALESCE(reviewer, 'unknown'),
+               COALESCE(reviewed_at, created_at)
+        FROM questions WHERE status = 'approved' ORDER BY id""")
+
+
 # Index i upgrades a database from version i to version i + 1.
-MIGRATIONS = [_migrate_to_v1]
+MIGRATIONS = [_migrate_to_v1, _migrate_to_v2]
 SCHEMA_VERSION = len(MIGRATIONS)
 
 
