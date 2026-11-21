@@ -1,4 +1,4 @@
-# API Contract — CP2 v0.2 (proposed by A, additive over v0.1)
+# API Contract — CP2 v0.3 (proposed by A, additive over v0.1)
 
 Base URL locally: `http://localhost:8000`. Frontend `VITE_API_URL` may override it.
 
@@ -32,11 +32,12 @@ New in v0.2 (all additive; v0.1 callers need no change):
 
 | Method | URL | Request | Result |
 |---|---|---|---|
-| GET | `/api/health` | — | `{ "ok": true, "mode": "scaffold", "schema_version": 1 }` |
+| GET | `/api/health` | — | `{ "ok": true, "mode": "scaffold", "schema_version": 2 }` |
 | POST | `/api/questions` | `{ "question": "...", "client_request_id"?: "uuid" }` | 201 new; 200 when the same `client_request_id` is resent |
 | GET | `/api/questions` | optional `?status=pending\|approved`, `?limit=1..500` (default 100) | question array newest first |
 | GET | `/api/questions/{id}` | — | question object |
 | POST | `/api/questions/{id}/review` | `{ "answer": "...", "reviewer": "..." }` | approved question object |
+| GET | `/api/questions/{id}/reviews` | — | review history, oldest first: `[{ "version": 1, "action": "approve", "answer": "...", "reviewer": "...", "created_at": "..." }]`; `[]` while pending; 404 for nonexistent ID |
 | GET | `/api/knowledge` | optional `?q=text` (1–200 chars), `?limit=1..500` | approved question array; `q` is a case-insensitive substring match on question and reviewed answer |
 
 Failure semantics: 422 for invalid or blank input (including `limit` out of range and a `client_request_id` that is not 1–100 of `A-Z a-z 0-9 _ -`), 404 for nonexistent ID, 409 for a second review of an already approved question, 409 when a `client_request_id` is reused for a different question.
@@ -48,6 +49,12 @@ Optional. A client that generates one key per user submission and reuses it on r
 ### AI generator boundary (A ↔ B)
 
 `backend/app/ai_hook.py` defines `AnswerResult(answer, status, citations, error)` and `Citation(source, snippet, locator)`. B implements `generate(question) -> AnswerResult` and it is passed to `create_app(generator=...)`. The API calls it outside any database transaction, waits at most `CP2_AI_TIMEOUT` seconds (default 30, below the newcomer 60-second submit timeout), and stores any exception, timeout or malformed result as `ai_status="failed"` while still saving the question for mentor review.
+
+### Review state and history (v0.3)
+
+Allowed transitions live in one table, `TRANSITIONS` in `backend/app/repository.py`; today it is only `approve: pending -> approved`. An approval updates the question and appends a `reviews` row in **one transaction**: either both happen or neither does. Two concurrent approvals of the same question give exactly one 200 and one 409, and only the winner appears in the history. Questions approved before v0.3 get a backfilled version-1 history entry on upgrade.
+
+`version` numbers a question's reviews (1, 2, ...). It is reserved so that a later "revise approved answer" action needs no schema change. Revising is **not** allowed yet: a second review still returns 409, and enabling it needs a team decision in DECISION.md.
 
 ### Storage
 
