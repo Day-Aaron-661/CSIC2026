@@ -62,7 +62,7 @@ export default function ReviewCard({ item, draft, reviewerReady, approving, erro
     </div>
     {/* {isDemoPlaceholder(draft) && <p className="mentor-help">Replace the demo placeholder with a verified answer before approving.</p>} */}
     {error && <p className="mentor-error" role="alert">
-      Approval was not confirmed ({error}). Your answer is still here. Retrying is safe: the server rejects a second approval of the same question.
+      Approval was not confirmed ({error}). Your answer is still here. Try again; if it keeps failing, refresh the queue.
     </p>}
   </article>;
 }

@@ -24,10 +24,16 @@ export default function useMentorQueue() {
   const [notices, setNotices] = useState([]);
   const mounted = useRef(false);
   const readRequest = useRef(null);
+  // A refresh was asked for while a read was already running; read again when it ends,
+  // so a re-read after a failed approval is never silently dropped.
+  const refreshAgain = useRef(false);
   // Question ids with a review POST in flight; a ref blocks double clicks before React re-renders.
   const approvals = useRef(new Set());
   // Ids whose last approval attempt failed; if they leave the queue we explain why.
   const failedApprovals = useRef(new Set());
+  // Ids this mentor approved successfully. Approval is final (a second review is 409),
+  // so an older list that still shows one of them is ignored for that id.
+  const approvedIds = useRef(new Set());
   // Mirrors of state, so a refresh can compare the old queue with the new one.
   const itemsRef = useRef([]);
   const draftsRef = useRef({});
@@ -49,9 +55,14 @@ export default function useMentorQueue() {
   }, []);
 
   const refresh = useCallback(async () => {
-    // One read at a time, and none while an approval is in flight:
-    // an older list must not bring back a question that was just approved.
-    if (!mounted.current || readRequest.current || approvals.current.size) return;
+    // One read at a time. Reads continue while approvals are in flight, so a stalled
+    // approval cannot freeze the queue.
+    if (!mounted.current) return;
+    if (readRequest.current) {
+      refreshAgain.current = true;
+      return;
+    }
+    refreshAgain.current = false;
     const controller = new AbortController();
     readRequest.current = controller;
     setRefreshing(true);
@@ -64,23 +75,34 @@ export default function useMentorQueue() {
       const next = await api.questions('pending', { signal: controller.signal });
       if (controller.signal.aborted || !mounted.current || readRequest.current !== controller) return;
       if (!Array.isArray(next)) throw new Error('Invalid question list');
-      const nextIds = new Set(next.map(item => item.id));
+      // Cards with an approval in flight stay exactly as shown until that approval settles;
+      // questions already approved here are dropped even if an older list still has them.
+      const inFlight = itemsRef.current.filter(item => approvals.current.has(item.id));
+      const inFlightIds = new Set(inFlight.map(item => item.id));
+      const merged = next
+        .filter(item => !approvedIds.current.has(item.id) && !inFlightIds.has(item.id))
+        .concat(inFlight)
+        .sort((a, b) => b.id - a.id);
+      const nextIds = new Set(merged.map(item => item.id));
       for (const item of itemsRef.current) {
         if (nextIds.has(item.id)) continue;
-        // Someone else approved it. Only interrupt the mentor if they had work in progress on it.
-        const draft = draftsRef.current[item.id];
-        const edited = draft !== undefined && draft !== (item.ai_answer ?? '');
-        if (edited || failedApprovals.current.has(item.id)) {
-          addNotice({ key: `elsewhere-${item.id}`, kind: 'elsewhere', id: item.id });
+        if (failedApprovals.current.has(item.id)) {
+          // Our own approval may have been saved with its reply lost, so do not blame another mentor.
+          addNotice({ key: `gone-${item.id}`, kind: 'unconfirmed', id: item.id });
+        } else {
+          // Someone else approved it. Only interrupt the mentor if they had work in progress on it.
+          const draft = draftsRef.current[item.id];
+          const edited = draft !== undefined && draft !== (item.ai_answer ?? '');
+          if (edited) addNotice({ key: `gone-${item.id}`, kind: 'elsewhere', id: item.id });
         }
         failedApprovals.current.delete(item.id);
       }
-      itemsRef.current = next;
-      setItems(next);
+      itemsRef.current = merged;
+      setItems(merged);
       // Pre-fill only questions seen for the first time; never overwrite a draft being edited.
       updateDrafts(previous => {
         const kept = {};
-        for (const item of next) kept[item.id] = previous[item.id] ?? (item.ai_answer ?? '');
+        for (const item of merged) kept[item.id] = previous[item.id] ?? (item.ai_answer ?? '');
         return kept;
       });
       setApproveErrors(previous => Object.fromEntries(
@@ -96,7 +118,10 @@ export default function useMentorQueue() {
       clearTimeout(timeout);
       if (readRequest.current === controller) {
         readRequest.current = null;
-        if (mounted.current) setRefreshing(false);
+        if (mounted.current) {
+          setRefreshing(false);
+          if (refreshAgain.current) refresh();
+        }
       }
     }
   }, [addNotice, updateDrafts]);
@@ -116,9 +141,6 @@ export default function useMentorQueue() {
     if (!mounted.current || approvals.current.has(id) || !text || !name
       || text.length > MAX_ANSWER || name.length > MAX_REVIEWER) return false;
     approvals.current.add(id);
-    readRequest.current?.abort();
-    readRequest.current = null;
-    setRefreshing(false);
     setApproving(previous => ({ ...previous, [id]: true }));
     setApproveErrors(previous => without(previous, id));
     let failed = false;
@@ -127,6 +149,7 @@ export default function useMentorQueue() {
       await api.review(id, text, name);
       if (!mounted.current) return false;
       failedApprovals.current.delete(id);
+      approvedIds.current.add(id);
       itemsRef.current = itemsRef.current.filter(item => item.id !== id);
       setItems(itemsRef.current);
       updateDrafts(previous => without(previous, id));
@@ -142,8 +165,8 @@ export default function useMentorQueue() {
       approvals.current.delete(id);
       if (mounted.current) {
         setApproving(previous => without(previous, id));
-        // A lost response may still have saved. Re-read so a 409 or another mentor's
-        // approval shows up as "already reviewed" rather than as a retry loop.
+        // A lost response may still have saved. Re-read (queued if a read is running) so a
+        // 409 or another mentor's approval shows up as "no longer pending" rather than as a retry loop.
         if (failed) refresh();
       }
     }

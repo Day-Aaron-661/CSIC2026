@@ -196,7 +196,8 @@ test('explains a 409 when another mentor approved the question first', async ({ 
   await review.getByLabel('Mentor verified answer').fill('My late answer');
   await review.getByRole('button', { name: 'Approve answer' }).click();
   await expect(review).toHaveCount(0);
-  await expect(page.getByText(/Question #5 was already reviewed elsewhere/)).toBeVisible();
+  // The mentor's own attempt failed, so the notice does not claim who approved it.
+  await expect(page.getByText(/Question #5 is no longer pending\. It may have been approved by you/)).toBeVisible();
 });
 
 test('notifies only about edited questions that were reviewed elsewhere', async ({ page }) => {
@@ -293,4 +294,188 @@ test('long questions and literal markup fit a mobile viewport without executing 
   const width = await page.evaluate(() => ({ content: document.documentElement.scrollWidth, viewport: window.innerWidth }));
   expect(width.content).toBeLessThanOrEqual(width.viewport);
   await page.screenshot({ path: testInfo.outputPath('mentor-mobile.png'), fullPage: true });
+});
+
+// --- Review follow-up for #11: stalled approvals, concurrent approvals, notice wording ---
+
+// clock.install() keeps time running, so a poll would fire within an expect timeout and hide a bug.
+// Pausing a little ahead of now (no timer is due yet) stops polling for the rest of the test.
+async function stopPolling(page) {
+  await page.clock.pauseAt(Date.now() + 1_000);
+}
+
+function reviewId(request) {
+  return Number(new URL(request.url()).pathname.match(/questions\/(\d+)\/review/)[1]);
+}
+
+test('a stalled approval does not freeze the queue', async ({ page }) => {
+  await page.clock.install();
+  const hang = gate();
+  let pending = [question(50)];
+  await mockApi(page, async route => {
+    if (route.request().method() === 'POST') {
+      const body = route.request().postDataJSON();
+      await hang.promise; // the server takes the request but does not answer yet
+      const item = pending.find(existing => existing.id === 50);
+      pending = pending.filter(existing => existing.id !== 50);
+      await reply(route, approved(item, body));
+    } else await reply(route, pending);
+  });
+  await openMentor(page);
+  const stalled = card(page, 'Project question 50');
+  await stalled.getByLabel('Mentor verified answer').fill('Answer still in flight');
+  await stalled.getByRole('button', { name: 'Approve answer' }).click();
+  await expect(stalled.getByRole('button', { name: /Approving/ })).toBeDisabled();
+
+  pending = [question(51), ...pending];
+  await page.clock.fastForward(5_100);
+  await expect(card(page, 'Project question 51')).toBeVisible();
+
+  pending = [question(52), ...pending];
+  await page.getByRole('button', { name: 'Refresh queue' }).click();
+  await expect(card(page, 'Project question 52')).toBeVisible();
+  // The stalled card keeps its state while the rest of the queue updates.
+  await expect(stalled.getByRole('button', { name: /Approving/ })).toBeDisabled();
+  await expect(stalled.getByLabel('Mentor verified answer')).toHaveValue('Answer still in flight');
+
+  hang.release();
+  await expect(stalled).toHaveCount(0);
+  await expect(page.getByText('Question #50 approved. Newcomers now see your reviewed answer.')).toBeVisible();
+});
+
+test('an older list that arrives after an approval does not bring the question back', async ({ page }) => {
+  await page.clock.install();
+  let pending = [question(53)];
+  let holdNextRead = false;
+  const held = gate();
+  await mockApi(page, async route => {
+    if (route.request().method() === 'POST') {
+      const item = pending[0];
+      pending = [];
+      await reply(route, approved(item, route.request().postDataJSON()));
+      return;
+    }
+    if (holdNextRead) {
+      holdNextRead = false;
+      // Snapshot taken before the approval, plus a new question so we can see it was applied.
+      const stale = [question(54), ...pending];
+      await held.promise;
+      await reply(route, stale);
+      return;
+    }
+    await reply(route, pending);
+  });
+  await openMentor(page);
+  const review = card(page, 'Project question 53');
+  await expect(review).toBeVisible();
+  await stopPolling(page);
+
+  holdNextRead = true;
+  await page.getByRole('button', { name: 'Refresh queue' }).click();
+  await review.getByRole('button', { name: 'Approve answer' }).click();
+  await expect(review).toHaveCount(0);
+
+  held.release();
+  await expect(card(page, 'Project question 54')).toBeVisible();
+  await expect(review).toHaveCount(0);
+});
+
+test('a 409 on one card is explained at once while another approval is still pending', async ({ page }) => {
+  await page.clock.install();
+  const slow = gate();
+  let pending = [question(55), question(56)];
+  await mockApi(page, async route => {
+    if (route.request().method() === 'POST') {
+      if (reviewId(route.request()) === 55) {
+        const body = route.request().postDataJSON();
+        await slow.promise;
+        const item = pending.find(existing => existing.id === 55);
+        pending = pending.filter(existing => existing.id !== 55);
+        await reply(route, approved(item, body));
+      } else {
+        pending = pending.filter(existing => existing.id !== 56);
+        await reply(route, { detail: 'Already reviewed' }, 409);
+      }
+    } else await reply(route, pending);
+  });
+  await openMentor(page);
+  const first = card(page, 'Project question 55');
+  const second = card(page, 'Project question 56');
+  await expect(second).toBeVisible();
+  await stopPolling(page); // no poll can rescue the notice in this test
+  await first.getByRole('button', { name: 'Approve answer' }).click();
+  await expect(first.getByRole('button', { name: /Approving/ })).toBeDisabled();
+  await second.getByRole('button', { name: 'Approve answer' }).click();
+
+  await expect(second).toHaveCount(0);
+  await expect(page.getByText(/Question #56 is no longer pending/)).toBeVisible();
+  await expect(first.getByRole('button', { name: /Approving/ })).toBeDisabled();
+  slow.release();
+  await expect(first).toHaveCount(0);
+});
+
+test('a re-read asked for while another read is running is not dropped', async ({ page }) => {
+  await page.clock.install();
+  let pending = [question(57)];
+  let holdNextRead = false;
+  const held = gate();
+  await mockApi(page, async route => {
+    if (route.request().method() === 'POST') {
+      pending = [];
+      await reply(route, { detail: 'Already reviewed' }, 409);
+      return;
+    }
+    if (holdNextRead) {
+      holdNextRead = false;
+      const stale = [...pending]; // taken before the 409, still lists question 57
+      await held.promise;
+      await reply(route, stale);
+      return;
+    }
+    await reply(route, pending);
+  });
+  await openMentor(page);
+  const review = card(page, 'Project question 57');
+  await expect(review).toBeVisible();
+  await stopPolling(page);
+
+  holdNextRead = true;
+  await page.getByRole('button', { name: 'Refresh queue' }).click();
+  await review.getByRole('button', { name: 'Approve answer' }).click();
+  await expect(review.getByRole('alert')).toContainText('Approval was not confirmed (Already reviewed)');
+
+  held.release(); // the stale list still has 57; the queued re-read must follow it
+  await expect(review).toHaveCount(0);
+  await expect(page.getByText(/Question #57 is no longer pending/)).toBeVisible();
+});
+
+test('a lost reply that was actually saved gets a neutral notice', async ({ page }) => {
+  let pending = [question(58)];
+  await mockApi(page, async route => {
+    if (route.request().method() === 'POST') {
+      pending = []; // saved on the server, but the reply fails
+      await reply(route, { detail: 'Gateway timeout' }, 504);
+    } else await reply(route, pending);
+  });
+  await openMentor(page);
+  const review = card(page, 'Project question 58');
+  await review.getByRole('button', { name: 'Approve answer' }).click();
+  await expect(review).toHaveCount(0);
+  await expect(page.getByText(
+    'Question #58 is no longer pending. It may have been approved by you (if a reply was lost) or by another mentor. Check the Newcomer history.'
+  )).toBeVisible();
+  await expect(page.getByText(/reviewed elsewhere/)).toHaveCount(0);
+});
+
+test('a failed approval suggests trying again without promising that a retry is safe', async ({ page }) => {
+  await mockApi(page, async route => {
+    if (route.request().method() === 'POST') await reply(route, { detail: 'Question not found' }, 404);
+    else await reply(route, [question(59)]);
+  });
+  await openMentor(page);
+  const review = card(page, 'Project question 59');
+  await review.getByRole('button', { name: 'Approve answer' }).click();
+  const alert = review.getByRole('alert');
+  await expect(alert).toContainText('Approval was not confirmed (Question not found). Your answer is still here. Try again; if it keeps failing, refresh the queue.');
+  await expect(alert).not.toContainText('Retrying is safe');
 });

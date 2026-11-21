@@ -4,9 +4,12 @@ import useMentorQueue from './useMentorQueue.js';
 import './mentor.css';
 
 function noticeText(notice) {
-  return notice.kind === 'approved'
-    ? `Question #${notice.id} approved. Newcomers now see your reviewed answer.`
-    : `Question #${notice.id} was already reviewed elsewhere and left your queue. Your unsent edits for it were not saved.`;
+  if (notice.kind === 'approved') return `Question #${notice.id} approved. Newcomers now see your reviewed answer.`;
+  if (notice.kind === 'unconfirmed') {
+    // After a failed attempt we cannot tell whose approval was saved: ours (reply lost) or another mentor's.
+    return `Question #${notice.id} is no longer pending. It may have been approved by you (if a reply was lost) or by another mentor. Check the Newcomer history.`;
+  }
+  return `Question #${notice.id} was already reviewed elsewhere and left your queue. Your unsent edits for it were not saved.`;
 }
 
 export default function MentorView() {
