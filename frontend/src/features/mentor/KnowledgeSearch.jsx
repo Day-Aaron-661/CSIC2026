@@ -19,7 +19,7 @@ export default function KnowledgeSearch({ knowledge }) {
         </p>
       </div>
       <button type="button" className="secondary" onClick={() => refresh()} disabled={loading}>
-        {loading ? 'Refreshing…' : 'Refresh answers'}
+        {loading ? 'Refreshing…' : 'Refresh approved answers'}
       </button>
     </div>
 
@@ -33,7 +33,7 @@ export default function KnowledgeSearch({ knowledge }) {
       placeholder="e.g. backend setup"
     />
     {error && <p className="mentor-error" role="alert">
-      Could not load approved answers. Reviewing still works; try Refresh answers again.
+      Could not load approved answers. Reviewing still works; try Refresh approved answers again.
     </p>}
 
     {searching && <p className="mentor-help" role="status">

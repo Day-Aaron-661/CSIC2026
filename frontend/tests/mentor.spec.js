@@ -623,7 +623,7 @@ test('a failed knowledge read shows an error but reviewing still works', async (
   await expect(page.getByRole('alert')).toContainText('Could not load approved answers');
 
   fail = false;
-  await page.getByRole('button', { name: 'Refresh answers' }).click();
+  await page.getByRole('button', { name: 'Refresh approved answers' }).click();
   await expect(page.getByText('Could not load approved answers')).toHaveCount(0);
   await expect(page.getByText(/1 mentor-approved answer available/)).toBeVisible();
 

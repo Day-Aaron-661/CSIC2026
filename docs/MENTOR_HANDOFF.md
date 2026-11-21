@@ -64,7 +64,7 @@ Implementation date: 2026-11-21 (Asia/Taipei). Goal: mentors should not have to 
 1. **Similar approved answers on each card.** Under the AI draft, a card lists up to three previously approved questions that share keywords with the pending one, with reviewer, approval time and the approved answer (collapsed). The section is labeled "keyword match, not AI" and is hidden when nothing matches.
 2. **Use as starting point.** Copies that approved answer into the answer box and focuses it. If the mentor has already edited the box, a confirmation asks before replacing it. Reuse only fills the box; the question is approved only when the mentor presses Approve answer.
 3. **Search approved answers.** A search box above the queue searches every approved question and answer by keyword (read-only, up to ten results).
-4. **Fresh after each approval.** The approved-answer list is read on opening the Mentor view, on Refresh answers, and right after each successful approval, so an answer just approved is offered for the next similar question. It is not polled; approvals by another mentor show up after Refresh answers or the next own approval.
+4. **Fresh after each approval.** The approved-answer list is read on opening the Mentor view, on Refresh approved answers, and right after each successful approval, so an answer just approved is offered for the next similar question. It is not polled; approvals by another mentor show up after Refresh approved answers or the next own approval.
 5. **Approval timeout.** If an approval gets no reply within 15 seconds, the card shows "no reply after 15 seconds; it may still have been saved", keeps the typed answer and re-reads the queue. It never resends automatically. If the server did save it, the question leaves the queue with the neutral "no longer pending" notice from decision 5; otherwise the card stays and the mentor can try again (if the first request was in fact saved, the server answers 409 and the same notice follows). While an approval is waiting, the rest of the queue keeps refreshing (decision 6); the timeout additionally releases the stuck card.
 
 ### How matching works (and its limits)
@@ -83,4 +83,4 @@ Implementation date: 2026-11-21 (Asia/Taipei). Goal: mentors should not have to 
 2. As Newcomer, ask "How can I start the backend locally?". On its Mentor card, "Previously approved answers" lists the first question. Expand it, press Use as starting point, edit and approve.
 3. Type a keyword in Search approved answers; try one that matches nothing.
 4. Edit an answer, then press Use as starting point and cancel the confirmation: your text stays.
-5. Stop the backend and press Refresh answers: an error appears in the lookup panel while the last loaded queue stays usable.
+5. Stop the backend and press Refresh approved answers: an error appears in the lookup panel while the last loaded queue stays usable.
