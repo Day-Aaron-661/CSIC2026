@@ -1,1 +1,3 @@
-"""B：AI 問答（文件檢索與 LLM 草稿）。"""
+from .adapter import RagGenerator
+
+__all__ = ["RagGenerator"]
