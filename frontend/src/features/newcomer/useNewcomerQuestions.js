@@ -16,6 +16,9 @@ export default function useNewcomerQuestions() {
   const mounted = useRef(false);
   const readRequest = useRef(null);
   const writeRequest = useRef(null);
+  // Keep the same key after an uncertain POST outcome. A's new backend returns
+  // the original item when that key is retried; changing the text gets a new key.
+  const pendingSubmit = useRef(null);
 
   const refresh = useCallback(async () => {
     // A single read at a time; a pre-submission read must not erase a new item.
@@ -53,6 +56,10 @@ export default function useNewcomerQuestions() {
     // The ref closes the double-click window before React renders disabled UI.
     if (!mounted.current || writeRequest.current || !question || question.length > 2000) return false;
     const controller = new AbortController();
+    const attempt = pendingSubmit.current?.question === question
+      ? pendingSubmit.current
+      : { question, key: crypto.randomUUID() };
+    pendingSubmit.current = attempt;
     writeRequest.current = controller;
     readRequest.current?.abort();
     readRequest.current = null;
@@ -66,9 +73,10 @@ export default function useNewcomerQuestions() {
       controller.abort();
     }, SUBMIT_TIMEOUT);
     try {
-      const item = await api.ask(question, { signal: controller.signal });
+      const item = await api.ask(question, { signal: controller.signal, clientRequestId: attempt.key });
       if (controller.signal.aborted || !mounted.current || writeRequest.current !== controller) return false;
       // POST is authoritative. A separate failed GET must not look like a failed save.
+      pendingSubmit.current = null;
       setItems(previous => [item, ...previous.filter(existing => existing.id !== item.id)]);
       setLoaded(true);
       setSubmittedId(item.id);
