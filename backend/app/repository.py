@@ -63,13 +63,14 @@ class QuestionRepository:
             return row["question"], self._get(db, row["id"])
 
     def list(self, status=None, limit=100):
+        """Newest first; ``limit=None`` returns every matching row."""
         sql = f"SELECT {_PUBLIC_COLUMNS} FROM questions"
         params = []
         if status:
             sql += " WHERE status=?"
             params.append(status)
         sql += " ORDER BY id DESC LIMIT ?"
-        params.append(limit)
+        params.append(-1 if limit is None else limit)  # SQLite: negative LIMIT = no limit
         with self.database.connect() as db:
             return self._with_citations(db, db.execute(sql, params).fetchall())
 

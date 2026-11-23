@@ -7,6 +7,7 @@ from .repository import Conflict, IntegrityError, NotFound
 from .schemas import AskRequest, HealthOut, QuestionOut, ReviewRequest
 
 STATUS_PATTERN = "^(pending|approved)$"
+DEFAULT_LIST_LIMIT = 100
 
 
 def build_router(repo, generator, ai_timeout_seconds):
@@ -54,7 +55,11 @@ def build_router(repo, generator, ai_timeout_seconds):
 
     @router.get("/questions", response_model=list[QuestionOut])
     def list_questions(status: str | None = Query(default=None, pattern=STATUS_PATTERN),
-                       limit: int = Query(default=100, ge=1, le=500)):
+                       limit: int | None = Query(default=None, ge=1, le=500)):
+        # The mentor review queue needs every pending question, oldest
+        # included, so pending has no default cap. Other lists default to 100.
+        if limit is None and status != "pending":
+            limit = DEFAULT_LIST_LIMIT
         return repo.list(status, limit)
 
     @router.get("/questions/{question_id}", response_model=QuestionOut)

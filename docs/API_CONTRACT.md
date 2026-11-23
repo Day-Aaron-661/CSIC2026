@@ -34,7 +34,7 @@ New in v0.2 (all additive; v0.1 callers need no change):
 |---|---|---|---|
 | GET | `/api/health` | — | `{ "ok": true, "mode": "scaffold", "schema_version": 1 }` |
 | POST | `/api/questions` | `{ "question": "...", "client_request_id"?: "uuid" }` | 201 new; 200 when the same `client_request_id` is resent |
-| GET | `/api/questions` | optional `?status=pending\|approved`, `?limit=1..500` (default 100) | question array newest first |
+| GET | `/api/questions` | optional `?status=pending\|approved`, `?limit=1..500` (default 100; **no default cap for `status=pending`**, so the mentor queue always sees the oldest waiting question) | question array newest first |
 | GET | `/api/questions/{id}` | — | question object |
 | POST | `/api/questions/{id}/review` | `{ "answer": "...", "reviewer": "..." }` | approved question object |
 | GET | `/api/knowledge` | optional `?q=text` (1–200 chars), `?limit=1..500` | approved question array; `q` is a case-insensitive substring match on question and reviewed answer |
@@ -59,4 +59,4 @@ This is a **stable starter contract**, not a final schema. Owner B may propose e
 
 Frontend imports `frontend/src/api.js` only, not raw `fetch` scattered in feature components. Backend is authoritative for approval state. AI output alone must never update the approval status. Newcomer checks the shared list every five seconds while visible and refreshes when returning to the tab; Mentor's starter queue still needs manual refresh.
 
-The JS adapter accepts optional `{ signal }` as the second argument to `questions(status, options)` and `ask(question, options)`. This supports cancelling obsolete requests and timeouts; HTTP paths, bodies, question fields and existing callers are unchanged. Newcomer inserts the successful POST response immediately instead of treating a later list-read failure as a failed submission. There is no automatic POST retry or server-side idempotency guarantee.
+The JS adapter accepts optional `{ signal }` as the second argument to `questions(status, options)` and `ask(question, options)`. This supports cancelling obsolete requests and timeouts; HTTP paths, bodies, question fields and existing callers are unchanged. Newcomer inserts the successful POST response immediately instead of treating a later list-read failure as a failed submission. There is no automatic POST retry. Without a `client_request_id` there is no server-side idempotency guarantee; with one, see Duplicate submission above.
