@@ -3,11 +3,12 @@ import Timestamp from './Timestamp.jsx';
 import { searchKnowledge } from './matchKnowledge.js';
 
 // Read-only search over every mentor-approved answer.
-export default function KnowledgeSearch({ knowledge }) {
+// prepared: prepareKnowledge(knowledge.items), computed once per knowledge list.
+export default function KnowledgeSearch({ knowledge, prepared }) {
   const { items, loaded, loading, error, refresh } = knowledge;
   const [query, setQuery] = useState('');
   const searching = query.trim().length > 0;
-  const results = useMemo(() => searchKnowledge(query, items), [query, items]);
+  const { mode, items: results } = useMemo(() => searchKnowledge(query, prepared), [query, prepared]);
 
   return <section className="mentor-knowledge" aria-labelledby="mentor-knowledge-title">
     <div className="mentor-queue-heading">
@@ -38,7 +39,7 @@ export default function KnowledgeSearch({ knowledge }) {
 
     {searching && <p className="mentor-help" role="status">
       {results.length
-        ? `${results.length} matching ${results.length === 1 ? 'answer' : 'answers'}`
+        ? `${results.length} matching ${results.length === 1 ? 'answer' : 'answers'}${mode === 'text' ? ' (exact text match)' : ''}`
         : `No approved answers match “${query.trim()}”.`}
     </p>}
     {searching && results.length > 0 && <ul className="mentor-search-results">

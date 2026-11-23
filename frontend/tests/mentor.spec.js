@@ -593,8 +593,9 @@ test('re-reads approved answers after an approval so the next similar question c
   await openMentor(page);
   const later = card(page, 'How should I set up the database locally?');
   await expect(later).toBeVisible();
-  // Dev StrictMode mounts twice, so the initial read can happen twice; compare before/after.
-  await expect.poll(() => knowledgeReads).toBeGreaterThan(0);
+  // Dev StrictMode mounts twice, so the initial read can happen twice. Both initial reads
+  // have been handled once the loaded count is shown; only then record the count.
+  await expect(page.getByText(/0 mentor-approved answers available/)).toBeVisible();
   await expect(matchesIn(later)).toHaveCount(0);
   const readsBeforeApproval = knowledgeReads;
 
@@ -603,7 +604,7 @@ test('re-reads approved answers after an approval so the next similar question c
   await first.getByRole('button', { name: 'Approve answer' }).click();
   await expect(first).toHaveCount(0);
   await expect(matchesIn(later)).toContainText('How do I set up the database?');
-  expect(knowledgeReads).toBe(readsBeforeApproval + 1);
+  expect(knowledgeReads).toBeGreaterThan(readsBeforeApproval);
 });
 
 test('a failed knowledge read shows an error but reviewing still works', async ({ page }) => {
@@ -708,4 +709,106 @@ test('an approval with no reply times out, keeps the answer, never resends, and 
   await expect(page.getByText(/Question #44 is no longer pending\. It may have been approved by you/)).toBeVisible();
   expect(posts).toBe(1);
   hang.release();
+});
+
+// --- Review follow-up for #14 ---
+
+test('search falls back to a text match when the query has no keywords', async ({ page }) => {
+  const knowledge = [
+    knowledgeItem(70, '知識庫在哪裡？', '在共用雲端硬碟的 docs 資料夾。'),
+    knowledgeItem(71, 'How do I start the backend?', 'Run uvicorn from the backend folder.'),
+  ];
+  await mockApi(page, route => reply(route, []), route => reply(route, knowledge));
+  await openMentor(page);
+  const section = page.getByRole('region', { name: 'Approved answers', exact: true });
+  const search = page.getByLabel('Search approved answers');
+
+  await search.fill('庫'); // one Chinese character: no two-character keyword
+  await expect(section.getByText('1 matching answer (exact text match)')).toBeVisible();
+  await expect(section.getByRole('listitem')).toContainText('知識庫在哪裡？');
+
+  await search.fill('how'); // only a common word
+  await expect(section.getByText('1 matching answer (exact text match)')).toBeVisible();
+  await expect(section.getByRole('listitem')).toContainText('How do I start the backend?');
+
+  await search.fill('backend'); // normal keyword search is unchanged
+  await expect(section.getByText('1 matching answer', { exact: true })).toBeVisible();
+
+  await search.fill('庫存'); // keywords that match nothing still say so
+  await expect(section.getByText('No approved answers match “庫存”.')).toBeVisible();
+});
+
+test('matches accented letters, Japanese kana and Korean words', async ({ page }) => {
+  // Checked on review-card suggestions, which have no text-match fallback.
+  const knowledge = [
+    knowledgeItem(72, 'Where is the café?', 'On the first floor.'),
+    knowledgeItem(73, 'カフェの場所はどこですか？', '一階です。'),
+    knowledgeItem(74, '데이터베이스 설정 방법', '마이그레이션을 실행하세요.'),
+  ];
+  await mockApi(page, route => reply(route, [
+    question(75, { question: 'Is there a cafe nearby?' }),
+    question(81, { question: 'カフェはどこ？' }),
+    question(82, { question: '데이터베이스 설정 질문' }),
+  ]), route => reply(route, knowledge));
+  await openMentor(page);
+  // Each pair shares only the accented word / the kana text, so these also check accent folding and kana pairs.
+  await expect(matchesIn(card(page, 'Is there a cafe nearby?'))).toContainText('Where is the café?');
+  await expect(matchesIn(card(page, 'カフェはどこ？'))).toContainText('カフェの場所はどこですか？');
+  await expect(matchesIn(card(page, '데이터베이스 설정 질문'))).toContainText('데이터베이스 설정 방법');
+});
+
+test('reusing does not ask when the box is empty or holds another unchanged suggestion', async ({ page }) => {
+  const knowledge = [
+    knowledgeItem(76, 'How do I run the tests?', 'Use npm test.'),
+    knowledgeItem(77, 'How do I run the unit tests?', 'Use npm run test:unit.'),
+  ];
+  await mockApi(page, route => reply(route, [question(78, { question: 'How should I run the tests locally?' })]),
+    route => reply(route, knowledge));
+  await openMentor(page);
+  const review = card(page, 'How should I run the tests locally?');
+  const answer = review.getByLabel('Mentor verified answer');
+  const uses = matchesIn(review).getByRole('button', { name: 'Use as starting point' });
+  await expect(uses).toHaveCount(2);
+  const dialogs = [];
+  page.on('dialog', dialog => { dialogs.push(dialog.message()); dialog.dismiss(); });
+
+  // Suggestions are ordered by similarity: "How do I run the tests?" first.
+  await answer.fill('');
+  await uses.nth(0).click(); // empty box: no question asked
+  await expect(answer).toHaveValue('Use npm test.');
+  await uses.nth(1).click(); // box holds the other suggestion, unchanged: no question asked
+  await expect(answer).toHaveValue('Use npm run test:unit.');
+  expect(dialogs).toEqual([]);
+
+  await answer.fill('Use npm run test:unit, then npm test.');
+  await uses.nth(0).click(); // the mentor's own text: ask, and keep it when dismissed
+  await expect.poll(() => dialogs.length).toBe(1);
+  await expect(answer).toHaveValue('Use npm run test:unit, then npm test.');
+});
+
+test('re-reads approved answers when an approval with a lost reply turns out to be saved', async ({ page }) => {
+  let knowledge = [];
+  let pending = [
+    question(79, { question: 'How do I set up the cache?' }),
+    question(80, { question: 'How should I set up the cache locally?' }),
+  ];
+  await mockApi(page, async route => {
+    if (route.request().method() === 'POST') {
+      const item = pending.find(existing => existing.id === 79);
+      pending = pending.filter(existing => existing.id !== 79);
+      knowledge = [approved(item, route.request().postDataJSON())];
+      await reply(route, { detail: 'Gateway timeout' }, 504); // saved, but the reply is lost
+    } else await reply(route, pending);
+  }, route => reply(route, knowledge));
+  await openMentor(page);
+  const later = card(page, 'How should I set up the cache locally?');
+  await expect(page.getByText(/0 mentor-approved answers available/)).toBeVisible();
+  await expect(matchesIn(later)).toHaveCount(0);
+
+  const first = card(page, 'How do I set up the cache?');
+  await first.getByLabel('Mentor verified answer').fill('Start Redis first.');
+  await first.getByRole('button', { name: 'Approve answer' }).click();
+  await expect(page.getByText(/Question #79 is no longer pending/)).toBeVisible();
+  // Without pressing Refresh approved answers, the saved answer is offered for the similar question.
+  await expect(matchesIn(later)).toContainText('How do I set up the cache?');
 });

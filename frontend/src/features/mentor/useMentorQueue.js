@@ -16,8 +16,10 @@ function without(record, key) {
   return rest;
 }
 
-// onApproved(id) runs after the server confirms an approval (used to re-read approved answers).
-export default function useMentorQueue({ onApproved } = {}) {
+// onKnowledgeChange() runs when the set of approved answers may have grown: after the server
+// confirms our approval, or when a question leaves the queue because it was approved
+// (by another mentor, or by us with the reply lost). Used to re-read approved answers.
+export default function useMentorQueue({ onKnowledgeChange } = {}) {
   const [items, setItems] = useState([]);
   const [drafts, setDrafts] = useState({});
   const [loaded, setLoaded] = useState(false);
@@ -43,8 +45,8 @@ export default function useMentorQueue({ onApproved } = {}) {
   const itemsRef = useRef([]);
   const draftsRef = useRef({});
   // Latest callback in a ref, so a new function each render does not restart polling.
-  const onApprovedRef = useRef(onApproved);
-  onApprovedRef.current = onApproved;
+  const onKnowledgeChangeRef = useRef(onKnowledgeChange);
+  onKnowledgeChangeRef.current = onKnowledgeChange;
 
   const updateDrafts = useCallback((update) => {
     setDrafts(previous => {
@@ -92,8 +94,10 @@ export default function useMentorQueue({ onApproved } = {}) {
         .concat(inFlight)
         .sort((a, b) => b.id - a.id);
       const nextIds = new Set(merged.map(item => item.id));
+      let anyLeft = false;
       for (const item of itemsRef.current) {
         if (nextIds.has(item.id)) continue;
+        anyLeft = true;
         if (failedApprovals.current.has(item.id)) {
           // Our own approval may have been saved with its reply lost, so do not blame another mentor.
           addNotice({ key: `gone-${item.id}`, kind: 'unconfirmed', id: item.id });
@@ -107,6 +111,8 @@ export default function useMentorQueue({ onApproved } = {}) {
       }
       itemsRef.current = merged;
       setItems(merged);
+      // A question left the queue, so someone approved it; offer that answer for reuse too.
+      if (anyLeft) onKnowledgeChangeRef.current?.();
       // Pre-fill only questions seen for the first time; never overwrite a draft being edited.
       updateDrafts(previous => {
         const kept = {};
@@ -167,7 +173,7 @@ export default function useMentorQueue({ onApproved } = {}) {
       setItems(itemsRef.current);
       updateDrafts(previous => without(previous, id));
       addNotice({ key: `approved-${id}`, kind: 'approved', id });
-      onApprovedRef.current?.(id);
+      onKnowledgeChangeRef.current?.();
       return true;
     } catch (error) {
       if (!mounted.current) return false;

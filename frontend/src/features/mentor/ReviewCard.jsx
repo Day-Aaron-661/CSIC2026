@@ -22,10 +22,13 @@ export default function ReviewCard({ item, draft, matches, reviewerReady, approv
   const canApprove = reviewerReady && !approving && trimmed.length > 0 && trimmed.length <= MAX_ANSWER;
   // const canApprove = reviewerReady && !approving && trimmed.length > 0 && trimmed.length <= MAX_ANSWER && !isDemoPlaceholder(draft);
 
-  // Reusing only fills the answer box; the mentor still has to approve it.
+  // Reusing only fills the answer box; the mentor still has to approve it. Ask first only
+  // when the box holds the mentor's own text: not when it is empty, still the AI draft,
+  // or another suggestion that was just copied in unchanged.
   const reuseApprovedAnswer = (text) => {
-    if (!unchanged && draft !== text
-      && !window.confirm('Replace your edited answer with this approved answer?')) return;
+    const ownText = trimmed.length > 0 && !unchanged && draft !== text
+      && !matches.some(match => match.reviewed_answer === draft);
+    if (ownText && !window.confirm('Replace your edited answer with this approved answer?')) return;
     onDraftChange(text.slice(0, MAX_ANSWER));
     answerRef.current?.focus();
   };

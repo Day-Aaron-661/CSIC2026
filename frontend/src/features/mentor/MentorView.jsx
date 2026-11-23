@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import KnowledgeSearch from './KnowledgeSearch.jsx';
 import ReviewCard from './ReviewCard.jsx';
-import { findSimilar } from './matchKnowledge.js';
+import { findSimilar, prepareKnowledge } from './matchKnowledge.js';
 import useKnowledge from './useKnowledge.js';
 import useMentorQueue from './useMentorQueue.js';
 import './mentor.css';
@@ -24,11 +24,13 @@ export default function MentorView() {
   const {
     items, drafts, loaded, refreshing, loadError, approving, approveErrors, notices,
     refresh, setDraft, resetDraft, approve, dismissNotice,
-  } = useMentorQueue({ onApproved: () => refreshKnowledge({ force: true }) });
+  } = useMentorQueue({ onKnowledgeChange: () => refreshKnowledge({ force: true }) });
   const reviewerReady = reviewer.trim().length > 0;
+  // Keywords of approved answers are computed only when that list changes, not on every poll.
+  const prepared = useMemo(() => prepareKnowledge(knowledge.items), [knowledge.items]);
   const matches = useMemo(() => Object.fromEntries(
-    items.map(item => [item.id, findSimilar(item.question, knowledge.items)])
-  ), [items, knowledge.items]);
+    items.map(item => [item.id, findSimilar(item.question, prepared)])
+  ), [items, prepared]);
 
   return <section className="mentor" aria-labelledby="mentor-title">
     <div className="mentor-heading">
@@ -50,7 +52,7 @@ export default function MentorView() {
       {!reviewerReady && <p className="mentor-error" role="alert">Enter a reviewer name to approve answers.</p>}
     </div>
 
-    <KnowledgeSearch knowledge={knowledge} />
+    <KnowledgeSearch knowledge={knowledge} prepared={prepared} />
 
     <section className="mentor-queue" aria-labelledby="mentor-queue-title">
       <div className="mentor-queue-heading">
