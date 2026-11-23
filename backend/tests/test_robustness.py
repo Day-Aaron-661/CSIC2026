@@ -200,3 +200,16 @@ def test_knowledge_search(tmp_path):
     assert search("%") == [ids[1]]
     assert search("nothing") == []
     assert client.get("/api/knowledge?q=").status_code == 422
+
+
+def test_pending_queue_has_no_default_cap(tmp_path):
+    """The mentor queue must still see the oldest waiting questions past 100."""
+    client = make_client(tmp_path)
+    for i in range(105):
+        client.post("/api/questions", json={"question": f"Q{i}"})
+    pending = client.get("/api/questions?status=pending").json()
+    assert len(pending) == 105
+    assert pending[-1]["question"] == "Q0"
+    # Other lists keep the default cap, and an explicit limit still applies to pending.
+    assert len(client.get("/api/questions").json()) == 100
+    assert len(client.get("/api/questions?status=pending&limit=10").json()) == 10
