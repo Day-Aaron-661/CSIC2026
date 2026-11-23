@@ -40,7 +40,7 @@ New in v0.2 (all additive; v0.1 callers need no change):
 | GET | `/api/questions/{id}/reviews` | — | review history, oldest first: `[{ "version": 1, "action": "approve", "answer": "...", "reviewer": "...", "created_at": "..." }]`; `[]` while pending; 404 for nonexistent ID |
 | GET | `/api/knowledge` | optional `?q=text` (1–200 chars), `?limit=1..500` | approved question array; `q` is a case-insensitive substring match on question and reviewed answer |
 
-Failure semantics: 422 for invalid or blank input (including `limit` out of range and a `client_request_id` that is not 1–100 of `A-Z a-z 0-9 _ -`), 404 for nonexistent ID, 409 for a second review of an already approved question, 409 when a `client_request_id` is reused for a different question.
+Failure semantics: 422 for invalid or blank input (including `limit` out of range and a `client_request_id` that is not 1–100 of `A-Z a-z 0-9 _ -`), 404 for nonexistent ID, 409 for a second review of an already approved question, 409 when a `client_request_id` is reused for a different question, 422 when a review of an `ai_status="failed"` question submits the failure notice (`ai_answer`) unchanged. Approving an unchanged `placeholder` is still allowed for the demo; whether to block it is a pending team decision.
 
 ### Duplicate submission (`client_request_id`)
 

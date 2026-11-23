@@ -72,6 +72,12 @@ def build_router(repo, generator, ai_timeout_seconds):
         reviewer = payload.reviewer.strip()
         if not answer or not reviewer:
             raise HTTPException(422, "Answer and reviewer cannot be blank")
+        # The AI failure notice is not an answer: approving it unchanged would show
+        # newcomers a "mentor reviewed" answer that neither AI nor a mentor wrote.
+        # (ai_status/ai_answer never change after creation, so this check is race-free.)
+        item = get_or_404(question_id)
+        if item["status"] == "pending" and item["ai_status"] == "failed" and answer == item["ai_answer"]:
+            raise HTTPException(422, "The AI failure notice cannot be approved; write a verified answer")
         try:
             return repo.approve(question_id, answer, reviewer)
         except NotFound:

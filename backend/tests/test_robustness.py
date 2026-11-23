@@ -213,3 +213,26 @@ def test_pending_queue_has_no_default_cap(tmp_path):
     # Other lists keep the default cap, and an explicit limit still applies to pending.
     assert len(client.get("/api/questions").json()) == 100
     assert len(client.get("/api/questions?status=pending&limit=10").json()) == 10
+
+
+def test_failure_notice_cannot_be_approved_unchanged(tmp_path):
+    client = make_client(tmp_path, generator=RaisingGenerator())
+    item = client.post("/api/questions", json={"question": "Q?"}).json()
+    url = f"/api/questions/{item['id']}/review"
+
+    for answer in (FAILED_ANSWER, f"  {FAILED_ANSWER}  "):
+        assert client.post(url, json={"answer": answer, "reviewer": "M"}).status_code == 422
+    assert client.get(f"/api/questions/{item['id']}").json()["status"] == "pending"
+
+    # A real answer (even one quoting the notice) is accepted, and 409 still wins afterwards.
+    assert client.post(url, json={"answer": "Run make dev.", "reviewer": "M"}).status_code == 200
+    assert client.post(url, json={"answer": FAILED_ANSWER, "reviewer": "M"}).status_code == 409
+
+
+def test_placeholder_can_still_be_approved_unchanged(tmp_path):
+    """Demo behaviour kept on purpose (#11 decision 2) until the team decides."""
+    client = make_client(tmp_path)
+    item = client.post("/api/questions", json={"question": "Q?"}).json()
+    response = client.post(f"/api/questions/{item['id']}/review",
+                           json={"answer": item["ai_answer"], "reviewer": "M"})
+    assert response.status_code == 200
