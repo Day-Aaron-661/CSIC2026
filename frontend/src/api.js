@@ -23,7 +23,7 @@ async function request(path, options = {}) {
 
 export const api = {
   health: () => request('/api/health'),
-  ask: (question, { signal } = {}) => request('/api/questions', { method: 'POST', body: JSON.stringify({ question }), signal }),
+  ask: (question, { signal, clientRequestId } = {}) => request('/api/questions', { method: 'POST', body: JSON.stringify({ question, ...(clientRequestId ? { client_request_id: clientRequestId } : {}) }), signal }),
   questions: (status, { signal } = {}) => request('/api/questions' + (status ? `?status=${encodeURIComponent(status)}` : ''), { signal }),
   question: (id) => request(`/api/questions/${id}`),
   review: (id, answer, reviewer) => request(`/api/questions/${id}/review`, {
