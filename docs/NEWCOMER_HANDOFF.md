@@ -53,3 +53,14 @@ These are C's implementation choices proposed for human review. Record the team'
 - **All four:** real outside-team user sessions, substantive reviews, decision history and CP2 evidence. Automated browser tests are developer checks and do not count as those user sessions or as a prompt test suite.
 
 Unsent drafts are component state: they survive a failed submission or refresh, but not a page reload or switching away from the Newcomer view. Persistence and access control remain outside this C slice.
+
+## CP2 C integration update — PR #18 (2026-11-24)
+
+- The newcomer now displays structured `citations` (source, optional locator and excerpt) under the **original AI draft**, with an explicit notice that those references are not independently verified. A mentor's edited final answer is not automatically attributed to the AI draft's citations.
+- New `ai_status` values (`ok`, `failed`, `placeholder`) have distinct labels. A demo placeholder is not described as an AI draft and does not show misleading “no AI citations” copy. Old backend responses without `citations` / `ai_status` still render safely.
+- The `api.ask` request optionally includes A's `client_request_id`. A submitted question is not automatically retried: after an uncertain outcome, the same question text retains its request ID for a user-initiated retry, even after editing it away and back or reloading the tab. After confirmed success, its key is removed so an intentionally new submission starts fresh.
+- Pending request IDs are kept in tab-scoped `sessionStorage` (up to 20 recent unconfirmed question/key pairs). Only unconfirmed questions are retained there; confirmed keys are removed. Storage denial or a missing crypto API must not block submission, but server-enforced duplicate suppression then cannot be guaranteed. `crypto.randomUUID` is used where supported; `crypto.getRandomValues` works on non-HTTPS LAN origins. If both are unavailable, the request is sent without an idempotency key.
+- Backend compatibility: A/PR #12 returns 200 for a replayed key or 201 for a new question; both count as success. The old API ignores this optional field, so idempotency needs A/PR #12 to be merged to work across retries.
+- This PR updates only C's files plus the common `api.ask` adapter. The new and existing Playwright tests cover insecure-origin key fallback, reused IDs across changed text and tab reload, missing/malformed citation fields, error/placeholder states, and original two-browser review flow.
+
+**Privacy and limitations:** This prototype stores unconfirmed question text in session storage for retry matching until successful submission, tab closure, or eviction after 20 entries. Do not use it for secrets; no login/access controls are added here. Clearing browser tab storage means previously unconfirmed requests lose their old idempotency key. If crypto is entirely absent, manual retry can still create a duplicate.

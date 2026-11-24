@@ -287,3 +287,160 @@ test('long questions and literal markup fit a mobile viewport without executing 
   expect(width.content).toBeLessThanOrEqual(width.viewport);
   await page.screenshot({ path: testInfo.outputPath('newcomer-mobile.png'), fullPage: true });
 });
+
+
+test('shows draft citations without claiming mentor verification, including excerpts and locators', async ({ page }) => {
+  const answer = question(90, {
+    ai_status: 'ok',
+    ai_answer: 'Run the backend using the documented command. [1]',
+    citations: [
+      { source: 'README.md', snippet: 'Run uvicorn from the project root.', locator: 'Getting started' },
+      { source: 'docs/setup.md', snippet: null, locator: null },
+    ],
+  });
+  await mockApi(page, route => reply(route, [answer]));
+  await page.goto('/');
+  const result = card(page, 'Project question 90');
+  await expect(result.getByRole('heading', { name: 'Sources for AI draft · not independently verified' })).toBeVisible();
+  await expect(result.getByText('README.md', { exact: true })).toBeVisible();
+  await expect(result.getByText('docs/setup.md', { exact: true })).toBeVisible();
+  await expect(result.getByText('Getting started', { exact: false })).toBeVisible();
+  await result.getByText('Show source excerpt').click();
+  await expect(result.getByText('Run uvicorn from the project root.')).toBeVisible();
+  await expect(result.getByText('Mentor reviewed', { exact: true })).toHaveCount(0);
+});
+
+test('shows failed AI status honestly and tolerates missing or empty citations', async ({ page }) => {
+  const failed = question(91, { ai_status: 'failed', ai_answer: '[AI DRAFT UNAVAILABLE] Try later.', citations: [] });
+  const placeholder = question(92, { ai_status: 'placeholder', citations: [] });
+  const legacy = question(93);
+  await mockApi(page, route => reply(route, [failed, placeholder, legacy]));
+  await page.goto('/');
+  await expect(card(page, 'Project question 91').getByRole('heading', { name: 'AI draft unavailable' })).toBeVisible();
+  await expect(card(page, 'Project question 91').getByText(/still waiting for mentor review/)).toBeVisible();
+  await expect(card(page, 'Project question 91').getByRole('heading', { name: /Sources for AI draft/ })).toHaveCount(0);
+  await expect(card(page, 'Project question 92').getByRole('heading', { name: 'Demo placeholder · not AI generated' })).toBeVisible();
+  await expect(card(page, 'Project question 92').getByText(/citations|sources/i)).toHaveCount(0);
+  await expect(card(page, 'Project question 93').getByText('Sources are not available with this backend yet.')).toBeVisible();
+});
+
+test('retries a lost submission with the same request id and changes it for new question text', async ({ page }) => {
+  const requests = [];
+  let fail = true;
+  await mockApi(page, async route => {
+    if (route.request().method() !== 'POST') return reply(route, []);
+    const body = route.request().postDataJSON();
+    requests.push(body);
+    await reply(route, fail ? { detail: 'Transient server problem' } : question(requests.length + 100, body), fail ? 503 : 200);
+  });
+  await page.goto('/');
+  const input = page.getByLabel('Project question', { exact: true });
+  const submit = page.getByRole('button', { name: 'Submit question', exact: true });
+  await input.fill('How do I start locally?');
+  await submit.click();
+  await expect(page.getByRole('alert')).toContainText('Your draft is still here');
+  expect(requests).toHaveLength(1);
+  expect(requests[0].client_request_id).toMatch(/^[a-f0-9-]{36}$/i);
+  await submit.click();
+  await expect.poll(() => requests.length).toBe(2);
+  expect(requests[1].client_request_id).toBe(requests[0].client_request_id);
+
+  await input.fill('Where is the project README?');
+  fail = false;
+  await submit.click();
+  await expect(card(page, 'Where is the project README?')).toBeVisible();
+  expect(requests).toHaveLength(3);
+  expect(requests[2].client_request_id).not.toBe(requests[0].client_request_id);
+
+  await input.fill('Another new question');
+  await submit.click();
+  await expect(card(page, 'Another new question')).toBeVisible();
+  expect(requests[3].client_request_id).not.toBe(requests[2].client_request_id);
+});
+
+
+test('can submit without crypto.randomUUID on non-secure LAN-style origins', async ({ page }) => {
+  // Simulate insecure HTTP / older Safari, where randomUUID is not exposed.
+  await page.addInitScript(() => {
+    Object.defineProperty(window.crypto, 'randomUUID', { configurable: true, value: undefined });
+  });
+  const requests = [];
+  await mockApi(page, async route => {
+    if (route.request().method() !== 'POST') return reply(route, []);
+    const body = route.request().postDataJSON();
+    requests.push(body);
+    await reply(route, question(150, body), 201);
+  });
+  await page.goto('/');
+  await page.getByLabel('Project question', { exact: true }).fill('Can I submit over LAN HTTP?');
+  await page.getByRole('button', { name: 'Submit question', exact: true }).click();
+  await expect(card(page, 'Can I submit over LAN HTTP?')).toBeVisible();
+  expect(requests).toHaveLength(1);
+  // getRandomValues remains available and its hex key matches the backend contract.
+  expect(requests[0].client_request_id).toMatch(/^[a-f0-9]{32}$/);
+});
+
+test('reuses separate pending request IDs after switching question text back and forth', async ({ page }) => {
+  const requests = [];
+  await mockApi(page, async route => {
+    if (route.request().method() !== 'POST') return reply(route, []);
+    requests.push(route.request().postDataJSON());
+    await reply(route, { detail: 'Temporary failure' }, 503);
+  });
+  await page.goto('/');
+  const input = page.getByLabel('Project question', { exact: true });
+  const submit = page.getByRole('button', { name: 'Submit question', exact: true });
+  for (const [index, questionText] of ['First uncertain question', 'Second uncertain question', 'First uncertain question'].entries()) {
+    await input.fill(questionText);
+    await submit.click();
+    await expect.poll(() => requests.length).toBe(index + 1);
+    await expect(page.getByRole('alert')).toContainText('Your draft is still here');
+    await expect(submit).toBeEnabled();
+  }
+  expect(requests).toHaveLength(3);
+  expect(requests[0].client_request_id).toBe(requests[2].client_request_id);
+  expect(requests[0].client_request_id).not.toBe(requests[1].client_request_id);
+});
+
+test('preserves an unconfirmed request ID after a browser reload', async ({ page }) => {
+  const requests = [];
+  let fail = true;
+  await mockApi(page, async route => {
+    if (route.request().method() !== 'POST') return reply(route, []);
+    const body = route.request().postDataJSON();
+    requests.push(body);
+    await reply(route, fail ? { detail: 'Reply lost' } : question(170, body), fail ? 503 : 200);
+  });
+  await page.goto('/');
+  const input = page.getByLabel('Project question', { exact: true });
+  await input.fill('Question pending when I refreshed');
+  await page.getByRole('button', { name: 'Submit question', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Your draft is still here');
+  const oldKey = requests[0].client_request_id;
+  expect(oldKey).toBeTruthy();
+  await page.reload();
+  fail = false;
+  await input.fill('Question pending when I refreshed');
+  await page.getByRole('button', { name: 'Submit question', exact: true }).click();
+  await expect(card(page, 'Question pending when I refreshed')).toBeVisible();
+  expect(requests).toHaveLength(2);
+  expect(requests[1].client_request_id).toBe(oldKey);
+});
+
+test('ignores non-string citation metadata without crashing the question list', async ({ page }) => {
+  const answer = question(180, {
+    ai_status: 'ok',
+    citations: [
+      { source: 'README.md', locator: { unexpected: true }, snippet: 0 },
+      { source: 'docs/setup.md', locator: 'Section 2', snippet: 'Safe text excerpt' },
+    ],
+  });
+  await mockApi(page, route => reply(route, [answer]));
+  await page.goto('/');
+  const item = card(page, 'Project question 180');
+  await expect(item.getByText('README.md', { exact: true })).toBeVisible();
+  await expect(item.getByText('Section 2', { exact: false })).toBeVisible();
+  await item.getByText('Show source excerpt').click();
+  await expect(item.getByText('Safe text excerpt')).toBeVisible();
+  await expect(item.getByText('0', { exact: true })).toHaveCount(0);
+});
