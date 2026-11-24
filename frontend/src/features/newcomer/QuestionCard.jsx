@@ -42,13 +42,13 @@ export default function QuestionCard({ item }) {
       <summary>Original draft</summary>
       <p className="newcomer-answer-text">{item.ai_answer}</p>
     </details>}
-    {!aiFailed && (sources.length ? <section className="newcomer-sources" aria-label="Sources for AI draft">
+    {!aiFailed && !aiPlaceholder && (sources.length ? <section className="newcomer-sources" aria-label="Sources for AI draft">
       <h4>Sources for AI draft · not independently verified</h4>
       <ol>
         {sources.map((source, index) => <li key={index}>
           <span className="newcomer-source-name">{source.source}</span>
-          {source.locator && <span className="newcomer-source-locator"> · {source.locator}</span>}
-          {source.snippet && <details className="newcomer-source-excerpt">
+          {typeof source.locator === 'string' && source.locator.trim() && <span className="newcomer-source-locator"> · {source.locator}</span>}
+          {typeof source.snippet === 'string' && source.snippet.trim() && <details className="newcomer-source-excerpt">
             <summary>Show source excerpt</summary>
             <p>{source.snippet}</p>
           </details>}
