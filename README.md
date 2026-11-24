@@ -1,6 +1,6 @@
 # CSIC2026 — CP2 Team Scaffold
 
-**Status:** CP2 prototype in progress, **not** a finished AI product. The newcomer workspace supports question submission, shared history, review filters and automatic status updates against the persistent API. The mentor review queue pre-fills each answer with the draft for editing, checks for new questions automatically and approves each question at most once. Answers are still explicitly labeled placeholders; RAG, citations, prompt tests and authentication remain future work.
+**Status:** CP2 prototype in progress, **not** a finished AI product. The newcomer workspace supports question submission, shared history, review filters and automatic status updates against the persistent API. The mentor review queue pre-fills each answer with the draft for editing, checks for new questions automatically and approves each question at most once. Mentors also see previously approved answers to similar questions (keyword match, not AI) that they can reuse as a starting point, can search all approved answers, and get a clear error when an approval receives no reply. Answers are still explicitly labeled placeholders; RAG, citations, prompt tests and authentication remain future work.
 
 ## Run locally
 
@@ -20,7 +20,7 @@ npm ci
 npm run dev
 ```
 
-Open http://localhost:5173. In one browser tab select **Newcomer** and submit a question; in another select **Mentor**. The question appears in the queue within about five seconds (**Refresh queue** is also available); the answer box is pre-filled with the unreviewed draft, so check and edit it, then approve. Return to Newcomer: it refreshes on returning to the visible tab and checks every five seconds while visible. **Refresh answers** is also available. Both views use the same SQLite-backed API. API docs: http://localhost:8000/docs.
+Open http://localhost:5173. In one browser tab select **Newcomer** and submit a question; in another select **Mentor**. The question appears in the queue within about five seconds (**Refresh queue** is also available); the answer box is pre-filled with the unreviewed draft, so check and edit it, then approve. Once some answers are approved, a card for a similar question lists them under **Previously approved answers**; **Use as starting point** copies one into the answer box, which you still check and approve. **Search approved answers** above the queue searches them by keyword. Return to Newcomer: it refreshes on returning to the visible tab and checks every five seconds while visible. **Refresh answers** is also available. Both views use the same SQLite-backed API. API docs: http://localhost:8000/docs.
 
 ## Verify
 

@@ -34,10 +34,26 @@
 .mentor-empty { margin-top: 18px; padding: 28px 22px; text-align: center; color: var(--mentor-muted); border: 1px dashed #b9c5d4; border-radius: 12px; background: #ffffff80; }
 .mentor-empty h3 { color: #1b2a3d; font-size: 1rem; margin: 0 0 6px; }
 .mentor-empty p { margin: 0; }
+.mentor-knowledge { margin-top: 24px; padding: 22px; border: 1px solid #dce4ef; border-radius: 12px; background: white; box-shadow: 0 3px 12px #1b2a3d06; overflow-wrap: anywhere; }
+.mentor-knowledge h2 { font-size: 1.1rem; }
+.mentor-knowledge label { margin: 4px 0 6px; }
+.mentor-matches { margin-bottom: 16px; padding: 14px 16px; border: 1px solid #cfe0d6; border-radius: 8px; background: #f6fbf8; }
+.mentor-matches h4 { margin: 0; font-size: .9rem; }
+.mentor-match-note { color: var(--mentor-muted); font-weight: 400; }
+.mentor-matches ul, .mentor-search-results { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.mentor-search-results { margin-top: 12px; }
+.mentor-match { min-width: 0; padding: 12px 14px; border: 1px solid #dce4ef; border-radius: 8px; background: white; }
+.mentor-match-question { margin: 0; font-weight: 600; white-space: pre-wrap; }
+.mentor-match-meta { margin: 4px 0 8px; color: var(--mentor-muted); font-size: .8rem; }
+.mentor-match details { margin-bottom: 10px; }
+.mentor-match summary { cursor: pointer; color: #2056a3; font-size: .875rem; }
+.mentor-match details .mentor-text { margin-top: 8px; }
+.mentor-match button { margin: 0; }
 .mentor :is(button, textarea, input):focus-visible { outline: 3px solid #3275c4; outline-offset: 3px; }
 .mentor button { min-height: 44px; }
 @media (max-width: 560px) {
-  .mentor-reviewer, .mentor-card { padding: 16px; }
+  .mentor-reviewer, .mentor-card, .mentor-knowledge { padding: 16px; }
+  .mentor-match button { width: 100%; }
   .mentor-queue-heading { flex-direction: column; gap: 4px; }
   .mentor-queue-heading button { margin-bottom: 12px; }
   .mentor-card-footer { flex-direction: column; align-items: stretch; }

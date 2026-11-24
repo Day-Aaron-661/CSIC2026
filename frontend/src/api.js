@@ -26,8 +26,8 @@ export const api = {
   ask: (question, { signal } = {}) => request('/api/questions', { method: 'POST', body: JSON.stringify({ question }), signal }),
   questions: (status, { signal } = {}) => request('/api/questions' + (status ? `?status=${encodeURIComponent(status)}` : ''), { signal }),
   question: (id) => request(`/api/questions/${id}`),
-  review: (id, answer, reviewer) => request(`/api/questions/${id}/review`, {
-    method: 'POST', body: JSON.stringify({ answer, reviewer })
+  review: (id, answer, reviewer, { signal } = {}) => request(`/api/questions/${id}/review`, {
+    method: 'POST', body: JSON.stringify({ answer, reviewer }), signal
   }),
-  knowledge: () => request('/api/knowledge')
+  knowledge: ({ signal } = {}) => request('/api/knowledge', { signal })
 };
