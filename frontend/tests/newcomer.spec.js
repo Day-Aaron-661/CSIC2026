@@ -390,9 +390,10 @@ test('reuses separate pending request IDs after switching question text back and
   await page.goto('/');
   const input = page.getByLabel('Project question', { exact: true });
   const submit = page.getByRole('button', { name: 'Submit question', exact: true });
-  for (const questionText of ['First uncertain question', 'Second uncertain question', 'First uncertain question']) {
+  for (const [index, questionText] of ['First uncertain question', 'Second uncertain question', 'First uncertain question'].entries()) {
     await input.fill(questionText);
     await submit.click();
+    await expect.poll(() => requests.length).toBe(index + 1);
     await expect(page.getByRole('alert')).toContainText('Your draft is still here');
     await expect(submit).toBeEnabled();
   }
