@@ -22,6 +22,8 @@ npm run dev
 
 Open http://localhost:5173. In one browser tab select **Newcomer** and submit a question; in another select **Mentor**. The question appears in the queue within about five seconds (**Refresh queue** is also available); the answer box is pre-filled with the unreviewed draft, so check and edit it, then approve. Once some answers are approved, a card for a similar question lists them under **Previously approved answers**; **Use as starting point** copies one into the answer box, which you still check and approve. **Search approved answers** above the queue searches them by keyword. Return to Newcomer: it refreshes on returning to the visible tab and checks every five seconds while visible. **Refresh answers** is also available. Both views use the same SQLite-backed API. API docs: http://localhost:8000/docs.
 
+Backend settings (environment variables): `CP2_DB_PATH` (SQLite file, default `backend/data/cp2.sqlite3`), `CP2_CORS_ORIGINS` (comma-separated, default `http://localhost:5173`), `CP2_AI_TIMEOUT` (seconds, default 30). Existing database files are migrated automatically on startup.
+
 ## Verify
 
 From the repository root, after installing backend requirements:
