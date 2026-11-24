@@ -3,12 +3,12 @@
 任何失敗都回傳明確標示的狀態，不產生假答案、不捏造引用。
 """
 import logging
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
 from . import llm
+from .citations import expand_groups, sub_citations
 from .prompts import (REWRITE_SYSTEM_PROMPT, SYSTEM_PROMPT, build_prompt,
                       build_rewrite_prompt, fit_chunks, parse_rewrite)
 from .retriever import Chunk, retrieve
@@ -18,8 +18,6 @@ log = logging.getLogger(__name__)
 STATUS_ANSWERED = "answered"      # LLM 依文件產生了草稿
 STATUS_NO_CONTEXT = "no_context"  # 找不到相關文件，未呼叫 LLM
 STATUS_ERROR = "error"            # LLM 未實作、連線失敗或回傳空內容
-
-_CITATION = re.compile(r"( ?)\[(\d+)\]")
 
 
 @dataclass
@@ -39,19 +37,19 @@ class AnswerResult:
 
 
 def validate_citations(answer: str, chunks: list[Chunk]) -> tuple[str, list[Citation]]:
-    """保留有效的 [n] 並建立引用清單；移除指向不存在段落的 [n]。"""
+    """保留有效的 [n] 並建立引用清單；移除指向不存在段落的 [n]。
+    [1, 3]、[1-3] 先展開；程式碼裡的 argv[1] 等不算引用（規則見 citations.py）。"""
     valid = set(range(1, len(chunks) + 1))
     used = []
 
-    def replace(match):
-        number = int(match.group(2))
+    def replace(number):
         if number not in valid:
-            return ""
+            return None
         if number not in used:
             used.append(number)
-        return match.group(0)
+        return number
 
-    cleaned = _CITATION.sub(replace, answer).strip()
+    cleaned = sub_citations(expand_groups(answer), replace).strip()
     citations = [Citation(n, chunks[n - 1].source, chunks[n - 1].text[:200]) for n in sorted(used)]
     return cleaned, citations
 

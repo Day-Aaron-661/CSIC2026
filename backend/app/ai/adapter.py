@@ -8,25 +8,21 @@
 ai_hook 只存在於 A 的新版後端，因此在 generate() 內才 import。
 """
 import logging
-import re
 from typing import Callable
 
+from .citations import UNVERIFIED_NOTE, format_sources, sub_citations
 from .pipeline import STATUS_ANSWERED, generate_answer
 
 log = logging.getLogger(__name__)
-
-UNVERIFIED_NOTE = "(Unverified: this draft cites no project documents.)"
-_CITATION = re.compile(r"\[(\d+)\]")
 
 # 回傳 Mentor 已核准問答資料列（/api/knowledge 格式）的函式
 KnowledgeSource = Callable[[], list[dict]]
 
 
 def renumber_citations(answer: str, numbers: list[int]) -> str:
-    """把答案中的 [n]（context 段落編號）改成引用清單中的順序 1..k。"""
+    """把答案中的 [n]（context 段落編號）改成引用清單中的順序 1..k。程式碼裡的 [n] 不動。"""
     mapping = {old: new for new, old in enumerate(numbers, start=1)}
-    return _CITATION.sub(lambda m: f"[{mapping[int(m.group(1))]}]" if int(m.group(1)) in mapping else "",
-                         answer)
+    return sub_citations(answer, mapping.get)
 
 
 class RagGenerator:
@@ -53,8 +49,11 @@ class RagGenerator:
     def generate(self, question: str):
         from ..ai_hook import AnswerResult, Citation, failed
 
+        question = (question or "").strip()
+        if not question:
+            return failed("empty_question")
         try:
-            result = generate_answer((question or "").strip(), self._knowledge(), **self.options)
+            result = generate_answer(question, self._knowledge(), **self.options)
         except Exception as exc:  # 檢索等非預期錯誤
             log.exception("AI pipeline failed")
             return failed(f"pipeline_error:{type(exc).__name__}")
@@ -65,8 +64,8 @@ class RagGenerator:
         citations = [Citation(source=c.source, snippet=c.snippet) for c in result.citations]
         answer = renumber_citations(result.answer, [c.number for c in result.citations])
         if citations:
-            # 前端目前不顯示 citations 欄位，先把來源附在答案文字末尾
-            answer += "\n\nSources:\n" + "\n".join(f"[{n}] {c.source}" for n, c in enumerate(citations, start=1))
+            # 來源清單也附在答案末尾；已核准答案放回檢索前會由 citations.clean_for_reuse 拿掉
+            answer += "\n\n" + format_sources([c.source for c in citations])
         else:
             answer = f"{answer}\n\n{UNVERIFIED_NOTE}"
         return AnswerResult(answer=answer, status="ok", citations=citations)
