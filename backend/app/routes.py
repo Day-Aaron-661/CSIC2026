@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from .ai_hook import safe_generate
 from .db import SCHEMA_VERSION
 from .repository import Conflict, IntegrityError, NotFound
-from .schemas import AskRequest, HealthOut, QuestionOut, ReviewRequest
+from .schemas import AskRequest, HealthOut, QuestionOut, ReviewOut, ReviewRequest
 
 STATUS_PATTERN = "^(pending|approved)$"
 DEFAULT_LIST_LIMIT = 100
@@ -84,6 +84,13 @@ def build_router(repo, generator, ai_timeout_seconds):
             raise HTTPException(404, "Question not found") from None
         except Conflict:
             raise HTTPException(409, "Already reviewed") from None
+
+    @router.get("/questions/{question_id}/reviews", response_model=list[ReviewOut])
+    def review_history(question_id: int):
+        try:
+            return repo.reviews(question_id)
+        except NotFound:
+            raise HTTPException(404, "Question not found") from None
 
     @router.get("/knowledge", response_model=list[QuestionOut])
     def knowledge(q: str | None = Query(default=None, min_length=1, max_length=200),

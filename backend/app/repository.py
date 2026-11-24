@@ -18,6 +18,14 @@ class Conflict(Exception):
     pass
 
 
+# The only place review state rules live: action -> (required state, new state).
+# Adding e.g. "revise" or "reject" later means adding a row here (plus a
+# DECISION.md entry and the matching CHECK constraint migration).
+TRANSITIONS = {
+    "approve": ("pending", "approved"),
+}
+
+
 def _escape_like(text):
     return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
@@ -107,16 +115,44 @@ class QuestionRepository:
                 [(question_id, c.source.strip(), c.snippet, c.locator) for c in result.citations])
             return self._get(db, question_id)
 
-    def approve(self, question_id, answer, reviewer):
+    def apply_review(self, question_id, action, answer, reviewer):
+        """Apply a review action and record it in one transaction.
+
+        The state check and the update are a single conditional UPDATE, so
+        two concurrent reviews cannot both succeed. If writing the history
+        row fails, the status change is rolled back with it.
+        """
+        from_state, to_state = TRANSITIONS[action]
+        reviewed_at = now_iso()
         with self.database.connect() as db:
+            # Take the write lock up front so concurrent reviewers queue on
+            # the busy timeout instead of failing on a stale WAL snapshot.
+            db.execute("BEGIN IMMEDIATE")
             cur = db.execute(
-                """UPDATE questions SET status='approved', reviewed_answer=?,
-                   reviewer=?, reviewed_at=? WHERE id=? AND status='pending'""",
-                (answer, reviewer, now_iso(), question_id))
+                """UPDATE questions SET status=?, reviewed_answer=?, reviewer=?, reviewed_at=?
+                   WHERE id=? AND status=?""",
+                (to_state, answer, reviewer, reviewed_at, question_id, from_state))
             if cur.rowcount == 0:
                 exists = db.execute("SELECT 1 FROM questions WHERE id=?", (question_id,)).fetchone()
                 raise NotFound(question_id) if exists is None else Conflict(question_id)
+            db.execute(
+                """INSERT INTO reviews (question_id, version, action, answer, reviewer, created_at)
+                   VALUES (?, (SELECT COALESCE(MAX(version), 0) + 1 FROM reviews WHERE question_id=?),
+                           ?, ?, ?, ?)""",
+                (question_id, question_id, action, answer, reviewer, reviewed_at))
             return self._get(db, question_id)
+
+    def approve(self, question_id, answer, reviewer):
+        return self.apply_review(question_id, "approve", answer, reviewer)
+
+    def reviews(self, question_id):
+        with self.database.connect() as db:
+            if db.execute("SELECT 1 FROM questions WHERE id=?", (question_id,)).fetchone() is None:
+                raise NotFound(question_id)
+            rows = db.execute(
+                """SELECT version, action, answer, reviewer, created_at FROM reviews
+                   WHERE question_id=? ORDER BY version""", (question_id,)).fetchall()
+            return [dict(row) for row in rows]
 
 
 IntegrityError = sqlite3.IntegrityError

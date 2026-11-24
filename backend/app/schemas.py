@@ -37,6 +37,14 @@ class QuestionOut(BaseModel):
     citations: list[CitationOut] = []
 
 
+class ReviewOut(BaseModel):
+    version: int
+    action: Literal["approve"]
+    answer: str
+    reviewer: str
+    created_at: str
+
+
 class HealthOut(BaseModel):
     ok: bool
     mode: str
