@@ -4,8 +4,9 @@ Environment variables:
   CP2_DB_PATH        SQLite file (default backend/data/cp2.sqlite3)
   CP2_CORS_ORIGINS   comma-separated allowed origins (default http://localhost:5173)
   CP2_AI_TIMEOUT     seconds to wait for an AI draft before storing it as failed (default 30)
-  CP2_AI             answer generator: "placeholder" (default) or "gemini" (B's RagGenerator;
-                     needs backend/app/ai/gemini_api_keys.txt and documents, see README)
+  CP2_AI             answer generator: "placeholder" (default), "claude" or "gemini".
+                     claude/gemini run B's RagGenerator pipeline with that model;
+                     claude needs ANTHROPIC_API_KEY (TODO: set on the demo machine), see README
 """
 import os
 from pathlib import Path
@@ -21,7 +22,7 @@ from .routes import build_router
 DEFAULT_DB = str(Path(__file__).resolve().parents[1] / "data" / "cp2.sqlite3")
 
 
-AI_MODES = ("placeholder", "gemini")
+AI_MODES = ("placeholder", "claude", "gemini")
 
 
 def default_generator(repo):
@@ -34,11 +35,15 @@ def default_generator(repo):
     mode = os.getenv("CP2_AI", "placeholder").strip().lower() or "placeholder"
     if mode == "placeholder":
         return mode, PlaceholderGenerator()
-    if mode == "gemini":
+    if mode in ("claude", "gemini"):
         from .ai.adapter import RagGenerator  # imported only when enabled
+        options = {}
+        if mode == "claude":
+            from .ai import claude_llm
+            options["call"] = claude_llm.call_api  # gemini uses the pipeline default (llm.call_api)
         # Mentor-approved answers are retrieved alongside project documents,
         # so approved answers get reused in later drafts.
-        return mode, RagGenerator(knowledge_source=lambda: repo.search_knowledge(None, 500))
+        return mode, RagGenerator(knowledge_source=lambda: repo.search_knowledge(None, 500), **options)
     raise RuntimeError(f"Unknown CP2_AI={mode!r}; use one of: {', '.join(AI_MODES)}")
 
 
