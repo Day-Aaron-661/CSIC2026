@@ -32,7 +32,7 @@ New in v0.2 (all additive; v0.1 callers need no change):
 
 | Method | URL | Request | Result |
 |---|---|---|---|
-| GET | `/api/health` | — | `{ "ok": true, "mode": "scaffold", "schema_version": 2 }` |
+| GET | `/api/health` | — | `{ "ok": true, "mode": "placeholder", "schema_version": 2 }`; `mode` is `placeholder`, `gemini` or `custom` |
 | POST | `/api/questions` | `{ "question": "...", "client_request_id"?: "uuid" }` | 201 new; 200 when the same `client_request_id` is resent |
 | GET | `/api/questions` | optional `?status=pending\|approved`, `?limit=1..500` (default 100; **no default cap for `status=pending`**, so the mentor queue always sees the oldest waiting question) | question array newest first |
 | GET | `/api/questions/{id}` | — | question object |
@@ -49,6 +49,8 @@ Optional. A client that generates one key per user submission and reuses it on r
 ### AI generator boundary (A ↔ B)
 
 `backend/app/ai_hook.py` defines `AnswerResult(answer, status, citations, error)` and `Citation(source, snippet, locator)`. B implements `generate(question) -> AnswerResult` and it is passed to `create_app(generator=...)`. The API calls it outside any database transaction, waits at most `CP2_AI_TIMEOUT` seconds (default 30, below the newcomer 60-second submit timeout), and stores any exception, timeout or malformed result as `ai_status="failed"` while still saving the question for mentor review.
+
+`CP2_AI` picks the generator at startup: `placeholder` (default) or `gemini`, which is B's `RagGenerator` with `knowledge_source` reading up to 500 approved answers through `search_knowledge`. A generator passed to `create_app` always wins (health reports `custom`). Any other value refuses to start. Tests and the Playwright backend force `placeholder`, so they never call Gemini.
 
 ### Review state and history (v0.3)
 

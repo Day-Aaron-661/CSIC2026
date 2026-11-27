@@ -24,6 +24,18 @@ Open http://localhost:5173. In one browser tab select **Newcomer** and submit a 
 
 Backend settings (environment variables): `CP2_DB_PATH` (SQLite file, default `backend/data/cp2.sqlite3`), `CP2_CORS_ORIGINS` (comma-separated, default `http://localhost:5173`), `CP2_AI_TIMEOUT` (seconds, default 30). Existing database files are migrated automatically on startup.
 
+### Real AI drafts (optional)
+
+By default the backend stores a placeholder draft (`CP2_AI=placeholder`), so no key is needed for development, tests or CI. To use B's Gemini pipeline (`backend/app/ai/`):
+
+```bash
+cp backend/app/ai/gemini_api_keys.example.txt backend/app/ai/gemini_api_keys.txt   # one key per line; never commit this file
+cd backend
+CP2_AI=gemini CP2_AI_DOCS_DIR=../docs uvicorn app.main:app --reload
+```
+
+`CP2_AI_DOCS_DIR` is the folder of project documents the AI may cite (default `backend/app/ai/documents/`, empty). Mentor-approved answers are searched too. When nothing relevant is found, or Gemini is unavailable, the question is still saved with `ai_status="failed"` and a reason in `ai_error` (for example `no_context` or `llm_not_configured`) for the mentor to answer. `GET /api/health` reports the active `mode`. An unknown `CP2_AI` value stops the server at startup.
+
 ## Verify
 
 From the repository root, after installing backend requirements:
