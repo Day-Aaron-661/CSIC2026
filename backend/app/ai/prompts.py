@@ -9,6 +9,7 @@ A newcomer asks a question; your answer is a DRAFT that a mentor will review bef
 Rules:
 1. Answer ONLY from the numbered context passages provided. Do not use outside knowledge about this project.
 2. Cite every factual statement with the passage number in square brackets, e.g. [1] or [2][3].
+   Put each number in its own brackets: write [1][3], never [1, 3] or [1-3].
    Never cite a number that does not appear in the context.
 3. If the context does not contain enough information, say so plainly and state what is missing.
    Do not guess file paths, commands, settings, people or deadlines.
@@ -54,19 +55,28 @@ def parse_rewrite(raw) -> str | None:
     return line[:MAX_REWRITE_CHARS] or None
 
 
+def _passage_header(number: int, chunk: Chunk) -> str:
+    return f"[{number}] (source: {chunk.source})\n"
+
+
 def fit_chunks(chunks: list[Chunk], max_chars: int = MAX_CONTEXT_CHARS) -> list[Chunk]:
-    """依序保留區塊直到超過字數上限（至少保留一個）。編號以此結果為準。"""
+    """依序保留區塊，讓 format_context 的結果（含 [n] 標頭與分隔）不超過 max_chars。
+    第一段本身就太長時截斷它。編號以此結果為準。"""
     kept, used = [], 0
     for chunk in chunks:
-        if kept and used + len(chunk.text) > max_chars:
-            break
+        overhead = len(_passage_header(len(kept) + 1, chunk)) + (2 if kept else 0)
+        if used + overhead + len(chunk.text) > max_chars:
+            room = max_chars - used - overhead
+            if kept or room <= 0:
+                break
+            chunk = Chunk(chunk.source, chunk.text[:room], chunk.score)
         kept.append(chunk)
-        used += len(chunk.text)
+        used += overhead + len(chunk.text)
     return kept
 
 
 def format_context(chunks: list[Chunk]) -> str:
-    return "\n\n".join(f"[{n}] (source: {c.source})\n{c.text}" for n, c in enumerate(chunks, start=1))
+    return "\n\n".join(_passage_header(n, c) + c.text for n, c in enumerate(chunks, start=1))
 
 
 def build_prompt(question: str, chunks: list[Chunk]) -> str:

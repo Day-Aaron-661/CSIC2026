@@ -7,13 +7,20 @@
 改寫不可用時等同純 BM25。
 文件資料夾為空或不存在時回傳空清單，不會報錯。
 """
+import logging
 import math
 import os
 import re
 from collections import Counter
 from dataclasses import dataclass
+from fnmatch import fnmatch
+from functools import lru_cache
 from pathlib import Path
 from typing import Callable
+
+from .citations import clean_for_reuse
+
+log = logging.getLogger(__name__)
 
 # 專案文件放置位置；可用環境變數 CP2_AI_DOCS_DIR 覆寫。
 DEFAULT_DOCS_DIR = Path(__file__).resolve().parent / "documents"
@@ -33,8 +40,12 @@ DOC_SUFFIXES = {
 DOC_FILENAMES = {"Dockerfile", "Makefile", "CMakeLists.txt", "Procfile"}
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build",
              ".pytest_cache", ".mypy_cache", ".next", "coverage"}
-SKIP_FILENAMES = {"package-lock.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock",
-                  "gemini_api_keys.txt", ".env"}  # 金鑰檔絕不能被讀進語料
+SKIP_FILENAMES = {"package-lock.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock"}
+# 金鑰、憑證類檔案絕不能被讀進語料（比對小寫檔名）
+SECRET_PATTERNS = ("gemini_api_keys*", ".env", ".env.*", "*credential*", "*secret*",
+                   "service-account*", "service_account*", "*.pem", "*.key", "*.p12", "*.pfx",
+                   "id_rsa*", "id_ed25519*", ".npmrc", ".pypirc", ".netrc")
+SECRET_ALLOWED = {".env.example", "gemini_api_keys.example.txt"}
 MAX_FILE_BYTES = 1_000_000
 MAX_CHUNK_CHARS = 800
 
@@ -99,18 +110,33 @@ def split_text(text: str, max_chars: int = MAX_CHUNK_CHARS) -> list[str]:
 
 MARKDOWN_SUFFIXES = (".md", ".markdown")
 _MD_HEADING = re.compile(r"#{1,6}\s+\S")
-_MD_FENCE = re.compile(r"(```|~~~)")
+_MD_FENCE = re.compile(r"(`{3,}|~{3,})")
+
+
+def markdown_lines(text: str):
+    """逐行產生 (line, in_code)。程式碼區塊的開頭與結尾必須是同一種符號，
+    結尾長度不能少於開頭（例如 ```` 開頭不會被 ``` 結束）。"""
+    fence = None
+    for line in text.splitlines():
+        stripped = line.lstrip()
+        match = _MD_FENCE.match(stripped)
+        if fence is None:
+            if match:
+                fence = match.group(1)
+            yield line, fence is not None
+            continue
+        if (match and match.group(1)[0] == fence[0] and len(match.group(1)) >= len(fence)
+                and not stripped[len(match.group(1)):].strip()):
+            fence = None
+        yield line, True
 
 
 def split_markdown_sections(text: str) -> list[str]:
     """依 Markdown 標題（# ~ ######）切成小節；第一個標題之前的內容自成一節。
     程式碼區塊（``` / ~~~）內以 # 開頭的行不視為標題。"""
-    sections, current, in_fence = [], [], False
-    for line in text.splitlines():
-        stripped = line.lstrip()
-        if _MD_FENCE.match(stripped):
-            in_fence = not in_fence
-        if not in_fence and _MD_HEADING.match(stripped) and any(l.strip() for l in current):
+    sections, current = [], []
+    for line, in_code in markdown_lines(text):
+        if not in_code and _MD_HEADING.match(line.lstrip()) and any(l.strip() for l in current):
             sections.append("\n".join(current).strip())
             current = []
         current.append(line)
@@ -144,10 +170,19 @@ def split_document(source: str, text: str, max_chars: int = MAX_CHUNK_CHARS) -> 
     return split_text(text, max_chars)
 
 
+def is_secret_file(name: str) -> bool:
+    lowered = name.lower()
+    return lowered not in SECRET_ALLOWED and any(fnmatch(lowered, p) for p in SECRET_PATTERNS)
+
+
 def is_text_document(path: Path, root: Path) -> bool:
-    if not path.is_file() or path.name in SKIP_FILENAMES:
+    if not path.is_file() or path.name in SKIP_FILENAMES or is_secret_file(path.name):
         return False
     if any(part in SKIP_DIRS for part in path.relative_to(root).parts[:-1]):
+        return False
+    try:  # symlink 不能指到文件資料夾以外
+        path.resolve().relative_to(root.resolve())
+    except (OSError, ValueError):
         return False
     name = path.name.lower()
     if path.name not in DOC_FILENAMES and not any(name.endswith(s) for s in DOC_SUFFIXES):
@@ -158,33 +193,67 @@ def is_text_document(path: Path, root: Path) -> bool:
         return False
 
 
+def document_files(root: Path) -> list[Path]:
+    """走訪時就略過 SKIP_DIRS（不會進入 node_modules、.git），回傳排序後的文件路徑。"""
+    files = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
+        for name in sorted(filenames):
+            path = Path(dirpath) / name
+            if is_text_document(path, root):
+                files.append(path)
+    return files
+
+
+# 依資料夾快取切好的段落；檔案清單、修改時間或大小有變才重新讀取
+_CHUNK_CACHE: dict[str, tuple[tuple, list["Chunk"]]] = {}
+
+
 def load_document_chunks(directory: Path | None = None) -> list[Chunk]:
     root = Path(directory) if directory else docs_dir()
     if not root.is_dir():
         return []
-    chunks = []
-    for path in sorted(root.rglob("*")):
-        if not is_text_document(path, root):
+    entries = []
+    for path in document_files(root):
+        try:
+            stat = path.stat()
+        except OSError:
             continue
+        entries.append((path, path.relative_to(root).as_posix(), stat.st_mtime_ns, stat.st_size))
+    signature = tuple((source, mtime, size) for _, source, mtime, size in entries)
+    key = str(root.resolve())
+    cached = _CHUNK_CACHE.get(key)
+    if cached and cached[0] == signature:
+        return list(cached[1])
+
+    chunks = []
+    for path, source, _, _ in entries:
         try:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        source = path.relative_to(root).as_posix()
         chunks.extend(Chunk(source, piece) for piece in split_document(source, text))
-    return chunks
+    _CHUNK_CACHE[key] = (signature, chunks)
+    return list(chunks)
 
 
 def knowledge_chunks(knowledge: list[dict] | None) -> list[Chunk]:
-    """把 Mentor 已核准的問答（/api/knowledge 的資料列）轉成可檢索的區塊。"""
+    """把 Mentor 已核准的問答（/api/knowledge 的資料列）轉成可檢索的區塊。
+    答案裡舊的 [n] 標記和 Sources 清單會先拿掉，避免和這次 context 的編號混在一起。"""
     chunks = []
     for row in knowledge or []:
-        answer = (row.get("reviewed_answer") or "").strip()
+        answer = clean_for_reuse((row.get("reviewed_answer") or "").strip())
         if row.get("status") != "approved" or not answer:
             continue
-        text = f"Q: {row.get('question', '').strip()}\nA (mentor verified): {answer}"
+        text = f"Q: {(row.get('question') or '').strip()}\nA (mentor verified): {answer}"
         chunks.append(Chunk(f"knowledge#{row.get('id')}", text))
     return chunks
+
+
+@lru_cache(maxsize=50_000)
+def term_counts(text: str) -> Counter:
+    """段落的詞頻（快取；文件沒變時不必每題重新切詞）。回傳值不可修改。"""
+    return Counter(tokenize(text))
 
 
 class BM25Index:
@@ -192,7 +261,7 @@ class BM25Index:
 
     def __init__(self, chunks: list[Chunk], k1: float = 1.5, b: float = 0.75):
         self.chunks, self.k1, self.b = chunks, k1, b
-        self.tf = [Counter(tokenize(c.text)) for c in chunks]
+        self.tf = [term_counts(c.text) for c in chunks]
         self.length = [sum(t.values()) for t in self.tf]
         self.avg = (sum(self.length) / len(self.length)) if self.length else 1.0
         df = Counter(term for counts in self.tf for term in counts)
@@ -233,8 +302,8 @@ def build_catalog(chunks: list[Chunk], max_chars: int = 3000) -> str:
             seen.add(chunk.source)
             lines.append(chunk.source)
         if chunk.source.lower().endswith(MARKDOWN_SUFFIXES):
-            lines.extend(f"  {line.strip()}" for line in chunk.text.splitlines()
-                         if re.match(r"#{1,6} \S", line.strip()))
+            lines.extend(f"  {line.strip()}" for line, in_code in markdown_lines(chunk.text)
+                         if not in_code and re.match(r"#{1,6} \S", line.strip()))
     catalog, used = [], 0
     for line in lines:
         if used + len(line) + 1 > max_chars:
@@ -263,8 +332,12 @@ def retrieve(question: str, knowledge: list[dict] | None = None,
     rank_lists = [[i for i, _ in index.search(question, candidates)]]
 
     if expand is not None:
-        expanded = expand(question, build_catalog(chunks))
-        if expanded and expanded.strip():
+        try:
+            expanded = expand(question, build_catalog(chunks))
+        except Exception:  # 改寫出錯時只用原問題的 BM25
+            log.warning("Query expansion failed; using the original question only", exc_info=True)
+            expanded = None
+        if isinstance(expanded, str) and expanded.strip():
             rank_lists.append([i for i, _ in index.search(expanded, candidates)])
 
     rank_lists = [ids for ids in rank_lists if ids]

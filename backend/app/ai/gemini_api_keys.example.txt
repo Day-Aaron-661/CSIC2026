@@ -1,0 +1,5 @@
+# 複製本檔為 gemini_api_keys.txt（同資料夾），再填入 key。
+# 一行一個，依序使用；超額時自動換下一個。以 # 開頭的行會被忽略。
+# your-first-key
+# your-second-key
+# your-third-key
