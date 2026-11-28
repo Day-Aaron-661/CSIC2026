@@ -18,14 +18,16 @@ C evidence: [PR #18 Actions run](https://github.com/Day-Aaron-661/CSIC2026/actio
 
 ## 2. Key integration blocker
 
-At this snapshot, `backend/app/main.py` in `main` still uses `PlaceholderGenerator()`; merging B's adapter did not automatically enable real model calls. Vincent has an **unmerged branch** `feature/a-ai-switch` which adds `CP2_AI=placeholder|gemini|claude` and B's generator wiring. This is in A's ownership boundary and should be reviewed and merged by the team; this document does **not** merge it or claim that the AI switch is live.
+At this snapshot, `backend/app/main.py` in `main` still uses `PlaceholderGenerator()`; merging B's adapter did not automatically enable real model calls. Vincent has an **open [PR #24](https://github.com/Day-Aaron-661/CSIC2026/pull/24)** (`feature/a-ai-switch`) which adds `CP2_AI=placeholder|gemini|claude` and B's generator wiring. This is in A's ownership boundary and should be reviewed and merged by the team; this document does **not** merge it or claim that the AI switch is live.
 
 - [x] A/B/C/D's principal feature PRs are merged.
-- [ ] A: open/review/merge the AI-switch change into `main`, with CI and a manual smoke test; avoid overwriting work on `feature/a-ai-switch`.
+- [ ] A: review/merge [PR #24](https://github.com/Day-Aaron-661/CSIC2026/pull/24) into `main`, with CI and a manual smoke test; avoid overwriting Vincent's branch.
 - [ ] Demo operator: configure a **real** API credential locally, never in Git or in a PR. Which provider to use depends on the accepted AI-switch branch.
 - [ ] Confirm model access and document retrieval with actual project documents; do not count a placeholder as a model-generated response.
 - [ ] Run the end-to-end scenario below and capture real screenshots/results.
 - [ ] Collect actual outside-team feedback, review notes and final submission documents (do not fabricate testing results).
+
+Other open documentation PRs: [#20 (PR template)](https://github.com/Day-Aaron-661/CSIC2026/pull/20), [#21 (AI guidelines)](https://github.com/Day-Aaron-661/CSIC2026/pull/21), and [#25 (A decisions)](https://github.com/Day-Aaron-661/CSIC2026/pull/25). Their owners/steward should check review status; these are not described as merged.
 
 ## 3. Safe key setup on the demo machine
 
