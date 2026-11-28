@@ -10,6 +10,7 @@ Purpose: If A's AI-switch PR [#24](https://github.com/Day-Aaron-661/CSIC2026/pul
 
 - Newcomer question -> stored AI draft -> Mentor review -> Newcomer sees approved answer, using the existing frontend and SQLite API.
 - `CP2_AI=gemini` selects B's `RagGenerator` with project document retrieval and mentor-approved answers as a knowledge source. AI citations are persisted in the existing response contract.
+- `CP2_AI=claude` reuses Vincent's Claude adapter from [A/PR #24](https://github.com/Day-Aaron-661/CSIC2026/pull/24), plugged into exactly the same B RAG pipeline. The adapter and its unit tests were copied into this backup branch so it remains usable independently of that unmerged PR.
 - `CP2_AI=placeholder` is still the default and does not require API credentials. Placeholder text is **not** an AI-generated answer.
 - `GET /api/health` reports which generator is **selected** (`placeholder`, `gemini`, or `custom`). The selected mode alone does not prove an actual provider request succeeded.
 - Missing keys, unavailable model, or missing relevant documents produce `ai_status=failed` instead of a fabricated model answer. The question is still sent to Mentor for review.
@@ -64,6 +65,18 @@ It should include `"mode":"gemini"`. Then submit a question covered by `docs/` a
 
 For LAN testing, update both `CP2_CORS_ORIGINS` (real frontend origins) and `VITE_API_URL` (API address reachable by the **client**). `localhost` on someone's phone does not point to your laptop.
 
+## Claude alternative (also available in the backup)
+
+The backup includes `CP2_AI=claude` by reusing A's work in [PR #24](https://github.com/Day-Aaron-661/CSIC2026/pull/24); its `claude_llm.py`, dependency and offline tests were brought here, not reimplemented from scratch.
+
+Install dependencies using `python3 -m pip install -r backend/requirements.txt`, set **your own** Anthropic API credential in the demo machine's environment (do not commit), then start from `backend/`:
+
+```bash
+CP2_AI=claude CP2_AI_DOCS_DIR=../docs uvicorn app.main:app --port 8000
+```
+
+The adapter reads `ANTHROPIC_API_KEY` (or supported SDK credentials). A consumer subscription alone does not guarantee Anthropic API access. The optional `CP2_CLAUDE_MODEL` must be one available to your API account. All tests mock provider calls; a real-key smoke test is still necessary. If an SDK experimental parameter is unavailable for your account, the request will correctly fail rather than manufacture an answer; Gemini can be used as the alternative.
+
 ## Tests / verification
 
 ```bash
@@ -75,13 +88,13 @@ npm test
 npm run build
 ```
 
-The new `backend/tests/test_backup_prototype.py` uses a **fake LLM call** and a disposable SQLite file to verify real B retriever/adapter wiring, source citations, idempotent retry, Mentor approval, subsequent reuse of approved knowledge, and failure states. Tests never contact the provider. The existing browser tests cover Newcomer/Mentor interaction with a disposable backend. Neither replaces a real key-backed smoke test on the demo machine.
+The new `backend/tests/test_backup_prototype.py` and reused/adapted A's `backend/tests/test_backup_ai_switch.py` use **fake provider calls** and a disposable SQLite file to verify real B retriever/adapter wiring, source citations, idempotent retry, Mentor approval, subsequent reuse of approved knowledge, and failure states. Tests never contact the provider. The existing browser tests cover Newcomer/Mentor interaction with a disposable backend. Neither replaces a real key-backed smoke test on the demo machine.
 
 ## Cutover if needed
 
 1. Keep A's [PR #24](https://github.com/Day-Aaron-661/CSIC2026/pull/24) as the preferred team integration.
 2. If that PR cannot land in time, choose this backup branch on the **demo machine** and run the commands above. No merge is required just to demonstrate it.
-3. Only if the team/steward agrees to merge, review its diff against the **latest** `main`. Both implementations edit `backend/app/main.py` and `backend/app/routes.py`, so **do not blindly merge or cherry-pick both**; choose one integration strategy.
+3. Only if the team/steward agrees to merge, review its diff against the **latest** `main`. Both implementations edit `backend/app/main.py` and `backend/app/routes.py`, so **do not blindly merge or cherry-pick both**; choose one integration strategy. This backup intentionally reuses A's Claude adapter and B's existing RAG pipeline, and credits those upstream contributions.
 4. Do not store actual secrets or private lab data in Git, public screenshots, or PR comments.
 
 ### What this backup does *not* guarantee
@@ -90,4 +103,4 @@ The new `backend/tests/test_backup_prototype.py` uses a **fake LLM call** and a 
 - No live Gemini response was tested by CI. Offline tests use controlled model stubs.
 - No authentication/authorization is added; use a safe demo environment only.
 - PR template, user-testing evidence, final submission files, and team decisions still require their actual owners.
-- This branch does not implement Claude; it specifically provides an independent Gemini path using B's existing adapter.
+- Claude is available through the copied *in-progress* A adapter. Its live API access is unverified until the demo operator supplies valid credentials and confirms a successful request.
