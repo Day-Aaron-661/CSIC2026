@@ -69,6 +69,8 @@ jobs:
         run: cd tested-main/frontend && npm run build
       - name: Capture actual GitHub Contributors page for submission evidence
         if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: node scripts/capture_main_contributors.cjs
       - name: Upload authentic contributors screenshot if available
         if: always()
