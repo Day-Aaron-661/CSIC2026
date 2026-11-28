@@ -17,6 +17,19 @@ Purpose: If A's AI-switch PR [#24](https://github.com/Day-Aaron-661/CSIC2026/pul
 - Invalid `CP2_AI` mode and non-positive `CP2_AI_TIMEOUT` fail clearly at startup.
 - No API key or internal document was committed. Nothing was pushed to `main`.
 
+## Preflight before the demo
+
+From the repo root, after installing `backend/requirements.txt`, check the intended model without contacting it:
+
+```bash
+python3 scripts/backup_preflight.py --mode placeholder
+python3 scripts/backup_preflight.py --mode gemini --docs docs
+# or when using Claude and its key is configured in your environment:
+python3 scripts/backup_preflight.py --mode claude --docs docs
+```
+
+If the check reports `NEEDS SETUP`, fix that before the demo; it never prints API keys. Passing preflight **only checks local setup**, not real provider model access. After switching the backend to the selected mode, still send an actual question and verify `ai_status=ok` and meaningful citations. For a custom key path, set `CP2_GEMINI_KEYS_FILE` consistently for both preflight and backend.
+
 ## Start with no external account (placeholder demo)
 
 ```bash
