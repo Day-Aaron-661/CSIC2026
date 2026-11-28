@@ -24,7 +24,8 @@ def offline(monkeypatch, tmp_path):
 
     monkeypatch.setattr(urllib.request, "urlopen", blocked)
     monkeypatch.setenv("CP2_GEMINI_KEYS_FILE", str(tmp_path / "no-keys.txt"))
-    for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CP2_CLAUDE_MODEL", "CP2_CLAUDE_EFFORT"):
+    for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_PROFILE", "ANTHROPIC_CONFIG_DIR",
+                 "CP2_CLAUDE_MODEL", "CP2_CLAUDE_EFFORT"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(claude_llm, "_client", None)
     docs = tmp_path / "docs"
@@ -191,6 +192,19 @@ def test_claude_without_credentials_still_saves_the_question(monkeypatch, tmp_pa
     item = client.post("/api/questions", json={"question": "How do I start the dev server?"}).json()
     assert (item["ai_status"], item["ai_error"], item["status"]) == ("failed", "llm_not_configured", "pending")
     assert fake.calls == []  # never sent a request
+
+
+def test_claude_missing_profile_is_reported_as_not_configured(monkeypatch, tmp_path, offline):
+    # The real SDK raises CredentialsError while building the client when the
+    # selected profile does not exist; that must read as "not configured".
+    monkeypatch.setenv("CP2_AI", "claude")
+    monkeypatch.setenv("ANTHROPIC_CONFIG_DIR", str(tmp_path / "no-config"))
+    monkeypatch.setenv("ANTHROPIC_PROFILE", "missing")
+    (offline / "SETUP.md").write_text("Start the dev server with make dev.\n", encoding="utf-8")
+    client = make_client(tmp_path)
+
+    item = client.post("/api/questions", json={"question": "How do I start the dev server?"}).json()
+    assert (item["ai_status"], item["ai_error"], item["status"]) == ("failed", "llm_not_configured", "pending")
 
 
 def test_claude_refusal_becomes_a_failed_draft(monkeypatch, tmp_path, offline):

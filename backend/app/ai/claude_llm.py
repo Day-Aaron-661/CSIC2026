@@ -47,7 +47,12 @@ def _get_client():
     global _client
     with _lock:
         if _client is None:
-            _client = anthropic.Anthropic(timeout=REQUEST_TIMEOUT, max_retries=0)
+            try:
+                _client = anthropic.Anthropic(timeout=REQUEST_TIMEOUT, max_retries=0)
+            except anthropic.CredentialsError as exc:
+                # e.g. ANTHROPIC_PROFILE / ANTHROPIC_CONFIG_DIR points at a missing
+                # profile: report it as "not configured", not a generic LLM error.
+                raise LLMNotConfigured(f"Anthropic credentials are misconfigured: {exc}") from exc
         return _client
 
 
