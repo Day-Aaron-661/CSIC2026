@@ -1,0 +1,80 @@
+name: Audit merged MAIN for CP2 issue 26 (evidence only)
+on:
+  push:
+    branches:
+      - test/main-e2e-20261129
+permissions:
+  contents: read
+jobs:
+  integrated-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout audit scripts (not app-under-test)
+        uses: actions/checkout@v4
+      - name: Checkout immutable MAIN app snapshot
+        uses: actions/checkout@v4
+        with:
+          ref: 2fb1b78bc03e6e0973c42c5d23a3e05ce2619960
+          path: tested-main
+      - name: Python runtime
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install the tested MAIN backend dependencies
+        run: python -m pip install -r tested-main/backend/requirements.txt
+      - name: Run all backend pytest on the actual MAIN checkout
+        run: |
+          cd tested-main
+          PYTHONPATH=backend python -m pytest -q backend/tests
+      - name: Run end-to-end app API/DB/AI-retrieval review flow on MAIN
+        env:
+          TESTED_MAIN: ${{ github.workspace }}/tested-main
+          TESTED_SHA: 2fb1b78bc03e6e0973c42c5d23a3e05ce2619960
+          REPORT_FILE: audit-results/main-e2e-report.json
+        run: python scripts/audit_main_e2e.py
+      - name: Save audit report even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-issue26-integration-report
+          path: audit-results/main-e2e-report.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  integrated-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout audit scripts
+        uses: actions/checkout@v4
+      - name: Checkout immutable MAIN app snapshot
+        uses: actions/checkout@v4
+        with:
+          ref: 2fb1b78bc03e6e0973c42c5d23a3e05ce2619960
+          path: tested-main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install MAIN backend / frontend deps
+        run: |
+          python -m pip install -r tested-main/backend/requirements.txt
+          cd tested-main/frontend
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run MAIN browser tests
+        run: cd tested-main/frontend && npm test
+      - name: Build MAIN frontend
+        run: cd tested-main/frontend && npm run build
+      - name: Capture actual GitHub Contributors page for submission evidence
+        if: always()
+        run: node scripts/capture_main_contributors.cjs
+      - name: Upload authentic contributors screenshot if available
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-contributor-graph-evidence
+          path: audit-results/
+          if-no-files-found: warn
+          retention-days: 14
