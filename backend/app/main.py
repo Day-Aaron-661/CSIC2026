@@ -7,10 +7,11 @@ Environment variables:
   CP2_DB_PATH        SQLite database file
   CP2_CORS_ORIGINS   comma-separated allowed frontend origins
   CP2_AI_TIMEOUT     seconds to wait for a draft (default 30)
-  CP2_AI             "placeholder" (default) or "gemini"
+  CP2_AI             "placeholder" (default), "gemini", or "claude"
   CP2_AI_DOCS_DIR    directory containing safe project documents to retrieve
   CP2_GEMINI_KEYS_FILE  local gitignored credentials file
   CP2_GEMINI_MODEL   model identifier supported by your Gemini API account
+  ANTHROPIC_API_KEY  credential for Claude; never committed
 """
 import os
 from pathlib import Path
@@ -24,7 +25,7 @@ from .repository import QuestionRepository
 from .routes import build_router
 
 DEFAULT_DB = str(Path(__file__).resolve().parents[1] / "data" / "cp2.sqlite3")
-AI_MODES = ("placeholder", "gemini")
+AI_MODES = ("placeholder", "gemini", "claude")
 
 
 def backup_generator(repo):
@@ -36,13 +37,20 @@ def backup_generator(repo):
     mode = (os.getenv("CP2_AI") or "placeholder").strip().lower() or "placeholder"
     if mode == "placeholder":
         return mode, PlaceholderGenerator()
-    if mode == "gemini":
+    if mode in ("gemini", "claude"):
         from .ai.adapter import RagGenerator
+        options = {}
+        if mode == "claude":
+            # Reuse the partial A/PR #24 implementation without changing B's
+            # prompt, retrieval, citation validation or adapter API.
+            from .ai import claude_llm
+            options["call"] = claude_llm.call_api
 
         # Knowledge is read on each call, so a newly approved answer immediately
         # becomes eligible for retrieval on a later question.
         generator = RagGenerator(
-            knowledge_source=lambda: repo.search_knowledge(None, 500)
+            knowledge_source=lambda: repo.search_knowledge(None, 500),
+            **options,
         )
         return mode, generator
     raise ValueError(f"Unsupported CP2_AI={mode!r}; choose: {', '.join(AI_MODES)}")
