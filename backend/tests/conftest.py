@@ -5,8 +5,12 @@ Importing ``app.main`` builds the module-level ``app``, which opens
 throwaway file before any test module imports the app, so tests never
 migrate or depend on a local dev database. Each test still passes its own
 ``tmp_path`` database to ``create_app``.
+
+``CP2_AI`` is forced to the placeholder for the same reason: a developer
+who exported ``CP2_AI=gemini`` must not make the test run call Gemini.
 """
 import os
 import tempfile
 
 os.environ["CP2_DB_PATH"] = os.path.join(tempfile.mkdtemp(prefix="cp2-tests-"), "import.sqlite3")
+os.environ["CP2_AI"] = "placeholder"

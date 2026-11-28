@@ -24,6 +24,22 @@ Open http://localhost:5173. In one browser tab select **Newcomer** and submit a 
 
 Backend settings (environment variables): `CP2_DB_PATH` (SQLite file, default `backend/data/cp2.sqlite3`), `CP2_CORS_ORIGINS` (comma-separated, default `http://localhost:5173`), `CP2_AI_TIMEOUT` (seconds, default 30). Existing database files are migrated automatically on startup.
 
+### Real AI drafts (optional)
+
+By default the backend stores a placeholder draft (`CP2_AI=placeholder`), so no key is needed for development, tests or CI. To draft answers with Claude through B's retrieval pipeline (`backend/app/ai/`):
+
+```bash
+# TODO(team): get an Anthropic API key for the demo machine. Never commit it.
+export ANTHROPIC_API_KEY=...   # or run `ant auth login` once
+cd backend
+CP2_AI=claude CP2_AI_DOCS_DIR=../docs uvicorn app.main:app --reload
+```
+
+- `CP2_AI_DOCS_DIR` is the folder of project documents the AI may cite (default `backend/app/ai/documents/`, empty). Mentor-approved answers are searched too.
+- Model settings: `CP2_CLAUDE_MODEL` (default `claude-opus-5-5`) and `CP2_CLAUDE_EFFORT` (default `low`; each draft makes two calls that must finish within `CP2_AI_TIMEOUT`). If the model declines a request, the API retries it on a fallback model in the same call (`fallbacks: "default"`).
+- `CP2_AI=gemini` still runs B's original Gemini adapter (keys in `backend/app/ai/gemini_api_keys.txt`).
+- When nothing relevant is found, or the model is unavailable, the question is still saved with `ai_status="failed"` and a reason in `ai_error` (for example `no_context`, `llm_not_configured` or `llm_error:APIConnectionError`) for the mentor to answer. `GET /api/health` reports the active `mode`. An unknown `CP2_AI` value stops the server at startup.
+
 ## Verify
 
 From the repository root, after installing backend requirements:
