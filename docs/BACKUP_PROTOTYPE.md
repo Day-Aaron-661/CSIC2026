@@ -30,6 +30,43 @@ python3 scripts/backup_preflight.py --mode claude --docs docs
 
 If the check reports `NEEDS SETUP`, fix that before the demo; it never prints API keys. Passing preflight **only checks local setup**, not real provider model access. After switching the backend to the selected mode, still send an actual question and verify `ai_status=ok` and meaningful citations. For a custom key path, set `CP2_GEMINI_KEYS_FILE` consistently for both preflight and backend.
 
+## Preferred: run with a private key prompt on your own machine
+
+You **do not need to give ChatGPT your API key or remote access to your computer**. The backup branch has two scripts that you can run locally. API keys are entered using a hidden terminal prompt; they are never sent to ChatGPT or committed to GitHub.
+
+From the repository root, install dependencies and start the backend:
+
+```bash
+git fetch origin
+git switch feature/backup-prototype-fallback  # or: git switch --track origin/feature/backup-prototype-fallback
+python3 -m pip install -r backend/requirements.txt
+python3 scripts/backup_demo.py --provider gemini --docs docs
+# Alternative: python3 scripts/backup_demo.py --provider claude --docs docs
+```
+
+The launcher prompts you privately for your provider API key. For Gemini it writes a **temporary 0600-permission file** and deletes it when the server stops; for Claude it passes the key through the backend child process's environment. It never displays it. It also uses a **temporary SQLite database** by default, so exploratory demo questions do not pollute the team's database. It binds only to `127.0.0.1:8000`; use the [README](../README.md) frontend instructions in a second terminal.
+
+If you intentionally want the demo questions to survive a restart, provide `--db /full/path/to/a/demo.sqlite3` with an existing parent directory. Do not point it at the real team's production database. For project documents, choose a **demo-safe** folder with `--docs /full/path/to/allowed/docs`. Never let a RAG demo index files containing secrets.
+
+### Check AI from your own machine, then share only sanitized results
+
+With the backend running, from a second terminal in the repository root:
+
+```bash
+python3 scripts/backup_smoke.py
+# This makes only a GET /api/health call (read-only).
+python3 scripts/backup_smoke.py --submit 'How do I start the backend with uvicorn?' --require-citations
+# This explicitly creates ONE demo question in the temporary database.
+```
+
+`backup_smoke.py` prints only HTTP status, selected mode, AI status, error category and the **number** of structured citations. It does **not** print your key, question text, answer, cited document contents or request headers. You can copy this small result back to ChatGPT for troubleshooting. Success still requires **human verification of the answer and sources** in the Newcomer UI. A successful `GET /api/health` alone does not prove a live provider call.
+
+For normal startup or debugging **without API keys**, use `python3 scripts/backup_demo.py --provider placeholder`. No provider is contacted.
+
+### When you do not have a computer for ChatGPT to control
+
+You can still make all code changes through GitHub here. To validate live Gemini/Claude, **someone running the demo locally must enter a valid key on their own machine**, and can report sanitized diagnostic output. Do not paste an API key into this conversation, GitHub PRs, Issues, LINE, CI logs, or a shared document. If using a CI secret in a repository you administer, limit access to trusted workflows and users; it is not needed for this backup's offline CI.
+
 ## Start with no external account (placeholder demo)
 
 ```bash
