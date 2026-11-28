@@ -10,7 +10,7 @@ STATUS_PATTERN = "^(pending|approved)$"
 DEFAULT_LIST_LIMIT = 100
 
 
-def build_router(repo, generator, ai_timeout_seconds):
+def build_router(repo, generator, ai_timeout_seconds, ai_mode="placeholder"):
     router = APIRouter(prefix="/api")
 
     def get_or_404(question_id):
@@ -32,7 +32,7 @@ def build_router(repo, generator, ai_timeout_seconds):
 
     @router.get("/health", response_model=HealthOut)
     def health():
-        return {"ok": True, "mode": "scaffold", "schema_version": SCHEMA_VERSION}
+        return {"ok": True, "mode": ai_mode, "schema_version": SCHEMA_VERSION}
 
     @router.post("/questions", status_code=201, response_model=QuestionOut)
     def ask(payload: AskRequest, response: Response):
